@@ -1,0 +1,3 @@
+[submodule "player_deps"]
+	path = player_deps
+	url = https://github.com/QIYI93/player_deps.git

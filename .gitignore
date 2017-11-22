@@ -1,3 +1,20 @@
+#cmake
+/cmbuild/
+/build/
+/build32/
+/build64/
+/release/
+/release32/
+/release64/
+/debug/
+/debug32/
+/debug64/
+/builds/
+*.o.d
+*.ninja
+.ninja*
+.dirstamp
+
 # Prerequisites
 *.d
 
