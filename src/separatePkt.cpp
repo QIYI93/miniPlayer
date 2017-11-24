@@ -6,7 +6,11 @@ bool PacketQueue::enQueue(const AVPacket *packet)
     AVPacket *pkt = av_packet_alloc();
     if (av_packet_ref(pkt, packet) < 0)
         return false;
-    std::lock_guard<std::mutex> lock(m_mutex);
+    std::unique_lock<std::mutex> lock(m_mutex);
+    while (m_maxElements <= m_queue.size())
+    {
+        m_cond.wait(lock);
+    }
     m_queue.push(*pkt);
     m_size += pkt->size;
     m_readyToDequeue = true;
@@ -30,6 +34,7 @@ bool PacketQueue::deQueue(AVPacket *packet, bool block)
             }
             AVPacket pkt = m_queue.front();
             m_queue.pop();
+            m_cond.notify_all();
             av_packet_unref(&pkt);
             m_size -= packet->size;
 
