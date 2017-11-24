@@ -1,5 +1,5 @@
-#ifndef SEPARATEPKE_H
-#define SEPARATEPKE_H
+#ifndef PKTANDFRAMEQUEUE_H
+#define PKTANDFRAMEQUEUE_H
 
 
 #include <queue>
@@ -22,18 +22,27 @@ struct PacketQueue
     std::condition_variable m_cond;
 
     PacketQueue() = default;
+    ~PacketQueue();
 
     bool enQueue(const AVPacket *packet);
     bool deQueue(AVPacket *packet, bool block = true);
 };
 
 
-struct SeparatePkt
+struct FrameQueue
 {
-    bool m_quit = false;
+    std::queue<AVFrame> m_queue;
+    int m_maxElements = 0;
+    bool m_readyToDequeue = false;
+    std::mutex m_mutex;
+    std::condition_variable m_cond;
 
+    FrameQueue() = default;
+    ~FrameQueue();
+
+    bool enQueue(const AVFrame *frame);
+    bool deQueue(AVFrame *frame, bool block = true);
 };
-
 
 
 #endif

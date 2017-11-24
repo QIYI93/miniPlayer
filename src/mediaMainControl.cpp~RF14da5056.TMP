@@ -112,7 +112,7 @@ void MediaMainControl::initSeparatePktThread()
     auto separatePktFun = [this](PacketQueue *videoPktQueue, PacketQueue *audioPktQueue, int audioInx,int videoInx, AVFormatContext *formatCtx, char* errMsgBuffer)
     {
         AVPacket *pAVPacket = (AVPacket*)av_malloc(sizeof(AVPacket));
-        while (true)
+        for (;;)
         {
             if (!formatCtx) return;
             int ret = av_read_frame(formatCtx, pAVPacket);
@@ -138,7 +138,6 @@ void MediaMainControl::initSeparatePktThread()
             else
                 av_packet_unref(pAVPacket);
         }
-        av_packet_free(&pAVPacket);
     };
 
     std::thread(separatePktFun, m_videoPktQueue, m_audioPktQueue, m_audioStreamIndex, m_videoStreamIndex, m_formatCtx, m_errMsgBuffer).detach();
@@ -156,41 +155,28 @@ void MediaMainControl::initDecodePktThread()
     {
         AVFrame *frame = av_frame_alloc();
         AVPacket *packet = (AVPacket*)av_malloc(sizeof(AVPacket));
-        int ret = 0;
-        while (true)
+        int ret;
+        for (;;)
         {
             if (!m_formatCtx) return;
             //decode video pkt
-            if (!m_videoPktQueue->m_queue.empty())
+            m_videoPktQueue->deQueue(packet);
+            ret = avcodec_send_packet(m_videoCodecCtx, packet);
+            if(ret != 0) continue;
+            while (avcodec_receive_frame(m_videoCodecCtx, frame))
             {
-                m_videoPktQueue->deQueue(packet);
-                if (avcodec_send_packet(m_videoCodecCtx, packet) == NULL)
-                {
-                    if (avcodec_receive_frame(m_videoCodecCtx, frame) == NULL)
-                    {
-                        m_videoFrameQueue->enQueue(frame);
-                        av_frame_unref(frame);
-                    }
-                }
-                av_packet_unref(packet);
+
             }
-            //decode audio pkt
-            if (!m_audioPktQueue->m_queue.empty())
-            {
-                m_audioPktQueue->deQueue(packet);
-                if (avcodec_send_packet(m_audioCodecCtx, packet) == NULL)
-                {
-                    while (avcodec_receive_frame(m_videoCodecCtx, frame) == NULL)
-                    {
-                        m_videoFrameQueue->enQueue(frame);
-                        av_frame_unref(frame);
-                    }
-                }
-                av_packet_unref(packet);
-            }
-        }
-        av_packet_free(&packet);
-        av_frame_free(&frame);
+                ret = ;
+                if (ret < 0 && ret != AVERROR_EOF)
+                    continue;
+
+                if (video->frameq.nb_frames >= FrameQueue::capacity)
+                    SDL_Delay(500);
+
+                video->frameq.enQueue(frame);
+
+                av_frame_unref(frame);
     };
 
     std::thread(decodePktFun).detach();
