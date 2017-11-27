@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include "pktAndFramequeue.h"
+#include "mediaDisplay.h"
 
 class AVFormatContext;
 class AVCodec;
@@ -45,6 +46,8 @@ private:
     PacketQueue *m_audioPktQueue = nullptr;
     FrameQueue *m_videoFrameQueue = nullptr;
     FrameQueue *m_audioFrameQueue = nullptr;
+
+    MediaDisplay *m_mediaDisplay = nullptr;
 
     char *m_errMsgBuffer = nullptr;
 

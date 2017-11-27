@@ -251,7 +251,13 @@ void MediaMainControl::playAudio()
 
 void MediaMainControl::playVideo()
 {
-
+    SDL_Rect rect;
+    rect.x = 0;
+    rect.y = 0;
+    rect.w = 640;
+    rect.h = 480;
+    m_mediaDisplay = MediaDisplay::createSDLWindow("test", rect);
+    m_mediaDisplay->show();
 }
 
 void MediaMainControl::msgOutput(const char* msg)
