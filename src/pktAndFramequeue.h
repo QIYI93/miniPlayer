@@ -14,7 +14,7 @@ extern "C"
 
 struct PacketQueue
 {
-    std::queue<AVPacket> m_queue;
+    std::queue<AVPacket*> m_queue;
     int m_size = 0;
     int m_maxElements = 0;
     bool m_readyToDequeue = false;
@@ -31,7 +31,7 @@ struct PacketQueue
 
 struct FrameQueue
 {
-    std::queue<AVFrame> m_queue;
+    std::queue<AVFrame*> m_queue;
     int m_maxElements = 0;
     bool m_readyToDequeue = false;
     std::mutex m_mutex;

@@ -6,8 +6,11 @@
 extern "C"
 {
     #include <libavformat/avformat.h>
+    #include <libswscale/swscale.h>
+    #include <libavutil/imgutils.h>
 }
 
+#include "mediaDisplay.h"
 namespace
 {
     auto const errMsgBufferSize = 2048;
@@ -58,7 +61,7 @@ bool MediaMainControl::openFile(const char *file)
     {
         if (m_totalTimeMS == -1)
             m_totalTimeMS = m_formatCtx->streams[m_videoStreamIndex]->duration * av_q2d(m_formatCtx->streams[m_videoStreamIndex]->time_base) * 1000;
-
+        m_fps = av_q2d(m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate);
         m_videoCodecCtx = avcodec_alloc_context3(m_videoCodec);
         avcodec_parameters_to_context(m_videoCodecCtx, m_formatCtx->streams[m_videoStreamIndex]->codecpar);
         ret = avcodec_open2(m_videoCodecCtx, m_videoCodec, nullptr);
@@ -68,6 +71,10 @@ bool MediaMainControl::openFile(const char *file)
             msgOutput(m_errMsgBuffer);
         }
     }
+    m_rect.x = 0;
+    m_rect.y = 0;
+    m_rect.w = m_videoCodecCtx->coded_width;
+    m_rect.h = m_videoCodecCtx->coded_height;
 
     if (m_audioStreamIndex != -1)
         m_audioCodec = avcodec_find_decoder(m_formatCtx->streams[m_audioStreamIndex]->codecpar->codec_id);
@@ -196,6 +203,48 @@ void MediaMainControl::initDecodePktThread()
     std::thread(decodePktFun).detach();
 }
 
+AVFrame* MediaMainControl::convertFrametoYUV420(AVFrame *src, const int width, const int height)
+{
+    static int h = 0;
+    static int w = 0;
+    static AVFrame *dst = nullptr;
+    if (w != width && h != height)
+    {
+        w = width;
+        h = height;
+        if (dst)
+            av_frame_free(&dst);
+    }
+    if (dst == nullptr)
+    {
+        dst = av_frame_alloc();
+        unsigned char* outBuffer = (unsigned char*)av_malloc(av_image_get_buffer_size(AV_PIX_FMT_YUV420P, width, height, 1));
+        av_image_fill_arrays(dst->data, dst->linesize, outBuffer, AV_PIX_FMT_YUV420P, width, height, 1);
+    }
+    m_swsCtx = sws_getCachedContext(m_swsCtx,
+        m_videoCodecCtx->width, m_videoCodecCtx->height,
+        m_videoCodecCtx->pix_fmt,
+        width, height,
+        AV_PIX_FMT_YUV420P,
+        SWS_BICUBIC,
+        nullptr, nullptr, nullptr);
+    if (!m_swsCtx)
+    {
+        msgOutput("sws_getCachedContext failed.");
+        return dst;
+    }
+    int ret = sws_scale(m_swsCtx, (const uint8_t* const*)src->data, src->linesize, 0, m_videoCodecCtx->height, dst->data, dst->linesize);
+    if (ret > 0)
+    {
+        return dst;
+    }
+    else
+    {
+        av_frame_free(&dst);
+        return dst;
+    }
+}
+
 void MediaMainControl::cleanPktQueue()
 {
     if (m_videoPktQueue != nullptr)
@@ -228,10 +277,10 @@ void MediaMainControl::play()
 {
     initSeparatePktThread();
     initDecodePktThread();
-    if (m_videoStreamIndex != -1)
-        playVideo();
     if (m_audioStreamIndex != -1)
         playAudio();
+    if (m_videoStreamIndex != -1);
+        playVideo();
 }
 
 void MediaMainControl::pause()
@@ -251,16 +300,14 @@ void MediaMainControl::playAudio()
 
 void MediaMainControl::playVideo()
 {
-    SDL_Rect rect;
-    rect.x = 0;
-    rect.y = 0;
-    rect.w = 640;
-    rect.h = 480;
-    m_mediaDisplay = MediaDisplay::createSDLWindow("test", rect);
-    m_mediaDisplay->show();
+    m_mediaDisplay = MediaDisplay::createSDLWindow(m_rect, "test", this);
+    m_mediaDisplay->m_fps = m_fps;
+    m_mediaDisplay->m_frameQueue = m_videoFrameQueue;
+    m_mediaDisplay->exec();
 }
 
 void MediaMainControl::msgOutput(const char* msg)
 {
+    std::unique_lock<std::mutex> lock(m_mutex);
     std::cout << "[Custom]: " << msg << std::endl;
 }

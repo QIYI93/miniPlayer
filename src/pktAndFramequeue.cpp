@@ -11,7 +11,7 @@ bool PacketQueue::enQueue(const AVPacket *packet)
     {
         m_cond.wait(lock);
     }
-    m_queue.push(*pkt);
+    m_queue.push(pkt);
     m_size += pkt->size;
     m_readyToDequeue = true;
     m_cond.notify_all();
@@ -27,15 +27,15 @@ bool PacketQueue::deQueue(AVPacket *packet, bool block)
     {
         if (!m_queue.empty())
         {
-            if (av_packet_ref(packet, &m_queue.front()) < 0)
+            if (av_packet_ref(packet, m_queue.front()) < 0)
             {
                 ret = false;
                 break;
             }
-            AVPacket pkt = m_queue.front();
+            AVPacket *pkt = m_queue.front();
             m_queue.pop();
             m_cond.notify_all();
-            av_packet_unref(&pkt);
+            av_packet_unref(pkt);
             m_size -= packet->size;
 
             ret = true;
@@ -61,9 +61,9 @@ PacketQueue::~PacketQueue()
 {
     while (!m_queue.empty())
     {
-        AVPacket pkt = m_queue.front();
+        AVPacket *pkt = m_queue.front();
         m_queue.pop();
-        av_packet_unref(&pkt);
+        av_packet_unref(pkt);
     }
 }
 
@@ -77,7 +77,7 @@ bool FrameQueue::enQueue(const AVFrame *frame_)
     {
         m_cond.wait(lock);
     }
-    m_queue.push(*frame);
+    m_queue.push(frame);
     m_readyToDequeue = true;
     m_cond.notify_all();
     return true;
@@ -92,15 +92,15 @@ bool FrameQueue::deQueue(AVFrame *frame, bool block)
     {
         if (!m_queue.empty())
         {
-            if (av_frame_ref(frame, &m_queue.front()) < 0)
+            if (av_frame_ref(frame, m_queue.front()) < 0)
             {
                 ret = false;
                 break;
             }
-            AVFrame frame_ = m_queue.front();
+            AVFrame *frame_ = m_queue.front();
             m_queue.pop();
             m_cond.notify_all();
-            av_frame_unref(&frame_);
+            av_frame_unref(frame_);
 
             ret = true;
             break;
@@ -125,8 +125,8 @@ FrameQueue::~FrameQueue()
 {
     while (!m_queue.empty())
     {
-        AVFrame frame = m_queue.front();
+        AVFrame *frame = m_queue.front();
         m_queue.pop();
-        av_frame_unref(&frame);
+        av_frame_unref(frame);
     }
 }
