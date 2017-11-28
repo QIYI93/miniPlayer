@@ -33,6 +33,7 @@ struct FrameQueue
 {
     std::queue<AVFrame*> m_queue;
     int m_maxElements = 0;
+    bool m_noMorePktToDecode = false;
     bool m_readyToDequeue = false;
     std::mutex m_mutex;
     std::condition_variable m_cond;

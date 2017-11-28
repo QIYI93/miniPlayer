@@ -43,7 +43,6 @@ private:
     void initDecodePktThread();
     void cleanPktQueue();
     void cleanFrameQueue();
-    void msgOutput(const char*);
 
 private:
     AVFormatContext *m_formatCtx = nullptr;
@@ -58,7 +57,6 @@ private:
     FrameQueue *m_videoFrameQueue = nullptr;
     FrameQueue *m_audioFrameQueue = nullptr;
     VideoRect m_rect;
-    MediaDisplay *m_mediaDisplay = nullptr;
 
     char *m_errMsgBuffer = nullptr;
 
@@ -69,6 +67,7 @@ private:
 
     std::mutex m_mutex;
 
+    bool m_noPktToSperate = false;
 };
 
 

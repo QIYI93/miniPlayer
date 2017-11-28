@@ -12,8 +12,8 @@
 
 typedef struct PlayState
 {
-    int threadPause = 0;
-    int threadExit = 0;
+    bool pause = false;
+    bool exit = false;
     int delay = 0;
     SDL_Event SDLEvent;
 }PlayState;
@@ -23,15 +23,15 @@ class MediaDisplay
 {
 public:
     static MediaDisplay *createSDLWindow(VideoRect rect, const char *title = "Window", MediaMainControl *mainControl = nullptr);
+    static void destroyWindow(std::string title);
     void draw(const uint8_t *data, const int lineSize);
     void exec();
-    void quit();
 
     int m_fps = 0;
     FrameQueue *m_frameQueue = nullptr;
 
 private:
-    MediaDisplay() = default;
+    MediaDisplay();
     bool init(const char *title, SDL_Rect rect, MediaMainControl *mainControl);
 
     ~MediaDisplay();
@@ -39,11 +39,11 @@ private:
     static void msgOutput(const char*);
 
 private:
-    SDL_Window* m_window = nullptr;
-    SDL_Renderer* m_renderer = nullptr;
-    SDL_Texture *m_texture = nullptr;
+    std::unique_ptr<SDL_Window, void(*)(SDL_Window*)> m_window;
+    std::unique_ptr<SDL_Renderer, void(*)(SDL_Renderer*)> m_renderer;
+    std::unique_ptr<SDL_Texture, void(*)(SDL_Texture*)> m_texture;
+
     SDL_Rect m_windowRect;
-    //SDL_Thread* m_SDLEventThread = nullptr;
     SDL_Thread* m_SDLEventThread = nullptr;
     PlayState m_playState;
 

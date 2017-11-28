@@ -14,6 +14,13 @@ extern "C"
 namespace
 {
     auto const errMsgBufferSize = 2048;
+    std::mutex s_mutex;
+}
+
+void msgOutput(const char* msg)
+{
+    std::unique_lock<std::mutex> lock(s_mutex);
+    std::cout << "[Custom]: " << msg << std::endl;
 }
 
 MediaMainControl* MediaMainControl::getInstance()
@@ -31,6 +38,7 @@ MediaMainControl::MediaMainControl()
 MediaMainControl::~MediaMainControl()
 {
     free(m_errMsgBuffer);
+    closeFile();
 }
 
 bool MediaMainControl::openFile(const char *file)
@@ -99,10 +107,16 @@ bool MediaMainControl::openFile(const char *file)
 
 void MediaMainControl::closeFile()
 {
+    cleanFrameQueue();
+    cleanPktQueue();
+
     avcodec_close(m_videoCodecCtx);
     avcodec_close(m_audioCodecCtx);
     avcodec_free_context(&m_videoCodecCtx);
     avcodec_free_context(&m_audioCodecCtx);
+
+    if (m_swsCtx)
+        sws_freeContext(m_swsCtx);
 
     if (m_formatCtx)
         avformat_close_input(&m_formatCtx);
@@ -119,14 +133,19 @@ void MediaMainControl::initSeparatePktThread()
     auto separatePktFun = [this](PacketQueue *videoPktQueue, PacketQueue *audioPktQueue, int audioInx,int videoInx, AVFormatContext *formatCtx, char* errMsgBuffer)
     {
         AVPacket *pAVPacket = (AVPacket*)av_malloc(sizeof(AVPacket));
+        int pktCount = 0;
         while (true)
         {
             if (!formatCtx) return;
             int ret = av_read_frame(formatCtx, pAVPacket);
             if (ret != NULL)
             {
-                if(ret == AVERROR_EOF) break;
-
+                if (ret == AVERROR_EOF)
+                {
+                    std::unique_lock<std::mutex> lock(m_mutex);
+                    m_noPktToSperate = true;
+                    break;
+                }
                 av_strerror(ret, errMsgBuffer, errMsgBufferSize);
                 msgOutput(errMsgBuffer);
                 continue;
@@ -134,7 +153,7 @@ void MediaMainControl::initSeparatePktThread()
             //enqueue packet
             if (pAVPacket->stream_index == audioInx)
             {
-                audioPktQueue->enQueue(pAVPacket);
+                //audioPktQueue->enQueue(pAVPacket);
                 av_packet_unref(pAVPacket);
             }
             else if (pAVPacket->stream_index == videoInx)
@@ -164,10 +183,12 @@ void MediaMainControl::initDecodePktThread()
         AVFrame *frame = av_frame_alloc();
         AVPacket *packet = (AVPacket*)av_malloc(sizeof(AVPacket));
         int ret = 0;
+        int frameCount = 0;
         while (true)
         {
             if (!m_formatCtx) return;
             //decode video pkt
+            
             if (!m_videoPktQueue->m_queue.empty())
             {
                 m_videoPktQueue->deQueue(packet);
@@ -187,13 +208,21 @@ void MediaMainControl::initDecodePktThread()
                 m_audioPktQueue->deQueue(packet);
                 if (avcodec_send_packet(m_audioCodecCtx, packet) == NULL)
                 {
-                    while (avcodec_receive_frame(m_videoCodecCtx, frame) == NULL)
+                    while (avcodec_receive_frame(m_audioCodecCtx, frame) == NULL)
                     {
-                        m_videoFrameQueue->enQueue(frame);
+                        m_audioFrameQueue->enQueue(frame);
                         av_frame_unref(frame);
                     }
                 }
                 av_packet_unref(packet);
+            }
+            {
+                std::unique_lock<std::mutex> lock(m_mutex);
+                if (m_noPktToSperate && m_videoPktQueue->m_queue.empty())
+                {
+                    m_videoFrameQueue->m_noMorePktToDecode = true;
+                    break;
+                }
             }
         }
         av_packet_free(&packet);
@@ -300,14 +329,9 @@ void MediaMainControl::playAudio()
 
 void MediaMainControl::playVideo()
 {
-    m_mediaDisplay = MediaDisplay::createSDLWindow(m_rect, "test", this);
-    m_mediaDisplay->m_fps = m_fps;
-    m_mediaDisplay->m_frameQueue = m_videoFrameQueue;
-    m_mediaDisplay->exec();
-}
-
-void MediaMainControl::msgOutput(const char* msg)
-{
-    std::unique_lock<std::mutex> lock(m_mutex);
-    std::cout << "[Custom]: " << msg << std::endl;
+    MediaDisplay *mediaDisplay = MediaDisplay::createSDLWindow(m_rect, "test", this);
+    mediaDisplay->m_fps = m_fps;
+    mediaDisplay->m_frameQueue = m_videoFrameQueue;
+    mediaDisplay->exec();
+    MediaDisplay::destroyWindow("test");
 }

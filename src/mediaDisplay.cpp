@@ -1,7 +1,6 @@
 #include "mediaDisplay.h"
 
 #include <map>
-#include <vector>
 #include <algorithm>
 #include <iostream>
 
@@ -9,21 +8,21 @@ using std::string;
 
 namespace
 {
-    std::vector<std::string> windowList;
+    std::map<std::string, MediaDisplay*> windowList;
+    std::mutex s_mutex;
 }
 
 MediaDisplay* MediaDisplay::createSDLWindow(VideoRect rect, const char *title, MediaMainControl *mainControl)
 {
-    auto ite = std::find_if(windowList.cbegin(), windowList.cend(), [title](const string item)
-    { return item == string(title); });
-    if (ite != windowList.cend())
+    if (windowList.find(title) != windowList.end())
     {
         msgOutput("Error,this window has exist.");
         return nullptr;
     }
 
-    windowList.push_back(title);
     MediaDisplay *mediaDisplay = new MediaDisplay();
+    windowList.insert(std::pair<std::string, MediaDisplay*>(title, mediaDisplay));
+
     SDL_Rect SDLRect;
     SDLRect.x = rect.x;
     SDLRect.y = rect.y;
@@ -40,6 +39,26 @@ MediaDisplay* MediaDisplay::createSDLWindow(VideoRect rect, const char *title, M
     }
 }
 
+void MediaDisplay::destroyWindow(string title)
+{
+    auto ite = windowList.find(title);
+    if (ite != windowList.end())
+    {
+        MediaDisplay *window = ite->second;
+        delete window;
+        windowList.erase(ite);
+    }
+
+}
+
+MediaDisplay::MediaDisplay()
+    :m_window(nullptr, SDL_DestroyWindow)
+    , m_renderer(nullptr, SDL_DestroyRenderer)
+    , m_texture(nullptr, SDL_DestroyTexture)
+{
+
+}
+
 bool MediaDisplay::init(const char *title, SDL_Rect rect, MediaMainControl *mainControl)
 {
     if (SDL_Init(SDL_INIT_EVERYTHING) == -1)
@@ -50,21 +69,21 @@ bool MediaDisplay::init(const char *title, SDL_Rect rect, MediaMainControl *main
 
     m_windowRect = rect;
 
-    m_window = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, m_windowRect.w, m_windowRect.h, SDL_WINDOW_SHOWN);
+    m_window.reset(SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, m_windowRect.w, m_windowRect.h, SDL_WINDOW_SHOWN));
     if (m_window == nullptr)
     {
         msgOutput("Failed to create window");
         return false;
     }
 
-    m_renderer = SDL_CreateRenderer(m_window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    m_renderer.reset(SDL_CreateRenderer(m_window.get(), -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC));
     if (m_renderer == nullptr)
     {
         msgOutput("Failed to create renderer");
         return false;
     }
 
-    m_texture = SDL_CreateTexture(m_renderer, SDL_PIXELFORMAT_IYUV, SDL_TEXTUREACCESS_STREAMING, rect.w, rect.h);
+    m_texture.reset(SDL_CreateTexture(m_renderer.get(), SDL_PIXELFORMAT_IYUV, SDL_TEXTUREACCESS_STREAMING, rect.w, rect.h));
     if (m_renderer == nullptr)
     {
         msgOutput("Failed to create texture");
@@ -79,9 +98,9 @@ static int event_thread(void* obaque)
     PlayState *playState = reinterpret_cast<PlayState*>(obaque);
     while (true)
     {
-        while (!playState->threadExit)
+        while (!playState->exit)
         {
-            if (!playState->threadPause)
+            if (!playState->pause)
             {
                 SDL_Event event;
                 event.type = SFM_REFRESH_EVENT;
@@ -109,6 +128,8 @@ void MediaDisplay::exec()
         SDL_WaitEvent(&m_playState.SDLEvent);
         if (m_playState.SDLEvent.type == SFM_REFRESH_EVENT)
         {
+            if(m_frameQueue->m_noMorePktToDecode && m_frameQueue->m_queue.empty())
+                break;
             m_frameQueue->deQueue(frameRaw);
             AVFrame *frameYUV = m_mainControl->convertFrametoYUV420(frameRaw, m_windowRect.w, m_windowRect.h);
             av_frame_unref(frameRaw);
@@ -117,7 +138,7 @@ void MediaDisplay::exec()
         }
         else if (m_playState.SDLEvent.type == SDL_QUIT)
         {
-            m_playState.threadExit = 1;
+            m_playState.exit = 1;
         }
         else if (m_playState.SDLEvent.type == SFM_BREAK_EVENT)
         {
@@ -128,24 +149,19 @@ void MediaDisplay::exec()
 
 void MediaDisplay::draw(const uint8_t *data, const int lineSize)
 {
-    SDL_UpdateTexture(m_texture, nullptr, data, lineSize);
-    SDL_RenderClear(m_renderer);
-    SDL_RenderCopy(m_renderer, m_texture, nullptr, nullptr);
-    SDL_RenderPresent(m_renderer);
-}
-
-void MediaDisplay::quit()
-{
-
+    SDL_UpdateTexture(m_texture.get(), nullptr, data, lineSize);
+    SDL_RenderClear(m_renderer.get());
+    SDL_RenderCopy(m_renderer.get(), m_texture.get(), nullptr, nullptr);
+    SDL_RenderPresent(m_renderer.get());
 }
 
 MediaDisplay::~MediaDisplay()
 {
+    SDL_Quit();
 }
 
-std::mutex m_mutex;
 void MediaDisplay::msgOutput(const char* msg)
 {
-    std::unique_lock<std::mutex> lock(m_mutex);
+    std::unique_lock<std::mutex> lock(s_mutex);
     std::cout << "[SDL]: " << msg << std::endl;
 }
