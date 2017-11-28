@@ -52,6 +52,12 @@ bool MediaMainControl::openFile(const char *file)
         msgOutput(m_errMsgBuffer);
         return false;
     }
+    if (avformat_find_stream_info(m_formatCtx, nullptr) < 0)
+    {
+        msgOutput("could not find codec parameters.");
+        return false;
+    }
+
     av_dump_format(m_formatCtx, 0, file, 0);
     if (m_formatCtx->duration != AV_NOPTS_VALUE)
         m_totalTimeMS = (m_formatCtx->duration / AV_TIME_BASE) * 1000;
@@ -67,9 +73,9 @@ bool MediaMainControl::openFile(const char *file)
         msgOutput("Not found video decoder.");
     else
     {
-        if (m_totalTimeMS == -1)
-            m_totalTimeMS = m_formatCtx->streams[m_videoStreamIndex]->duration * av_q2d(m_formatCtx->streams[m_videoStreamIndex]->time_base) * 1000;
-        m_fps = av_q2d(m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate);
+        if (m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate.den != NULL&&m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate.num != NULL)
+            m_fps = av_q2d(m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate);
+
         m_videoCodecCtx = avcodec_alloc_context3(m_videoCodec);
         avcodec_parameters_to_context(m_videoCodecCtx, m_formatCtx->streams[m_videoStreamIndex]->codecpar);
         ret = avcodec_open2(m_videoCodecCtx, m_videoCodec, nullptr);
@@ -90,9 +96,6 @@ bool MediaMainControl::openFile(const char *file)
         msgOutput("Not found audio decoder.");
     else
     {
-        if(m_totalTimeMS == -1)
-            m_totalTimeMS = m_formatCtx->streams[m_audioStreamIndex]->duration * av_q2d(m_formatCtx->streams[m_audioStreamIndex]->time_base);
-
         m_audioCodecCtx = avcodec_alloc_context3(m_audioCodec);
         avcodec_parameters_to_context(m_audioCodecCtx, m_formatCtx->streams[m_audioStreamIndex]->codecpar);
         ret = avcodec_open2(m_audioCodecCtx, m_audioCodec, nullptr);

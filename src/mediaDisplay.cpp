@@ -117,7 +117,7 @@ static int event_thread(void* obaque)
 
 void MediaDisplay::exec()
 {
-    m_playState.delay = 40;
+    m_playState.delay = 1000 / m_fps;
     m_SDLEventThread = SDL_CreateThread(event_thread, NULL, &m_playState);
 
     AVFrame* frameRaw = nullptr;
