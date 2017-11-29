@@ -2,9 +2,18 @@
 
 #include "mediaMainControl.h"
 
+
+#ifndef _DEBUG  
+extern "C"
+{
+#include "SDL.h"
+}
+#endif 
+
+
 int main(int argc, char * argv[])
 {
-    MediaMainControl::getInstance()->openFile("D:\\project\\ffmpeg\\media_data\\video\\sintel.wmv");
+    MediaMainControl::getInstance()->openFile("C:\\Project\\ffmpeg\\ffmpeg_study\\resource\\video\\sintel.wmv");
     MediaMainControl::getInstance()->play();
 
     //for (;;)

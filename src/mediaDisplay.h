@@ -3,12 +3,13 @@
 
 #include <memory>
 #include <mutex>
+
+extern "C"
+{
 #include "SDL.h"
+}
 #include "pktAndFramequeue.h"
 #include "mediaMainControl.h"
-
-#define SFM_REFRESH_EVENT (SDL_USEREVENT + 1)
-#define SFM_BREAK_EVENT (SDL_USEREVENT + 2)
 
 typedef struct PlayState
 {
@@ -18,27 +19,41 @@ typedef struct PlayState
     SDL_Event SDLEvent;
 }PlayState;
 
+typedef struct AudioBuffer
+{
+    uint8_t *PCMBuffer = nullptr;
+    int PCMBufferSize = 0;
+    uint8_t *pos = 0;
+    int restSize = 0;
+}AudioBuffer;
+
 class MediaMainControl;
 class MediaDisplay
 {
 public:
-    static MediaDisplay *createSDLWindow(VideoRect rect, const char *title = "Window", MediaMainControl *mainControl = nullptr);
-    static void destroyWindow(std::string title);
-    void draw(const uint8_t *data, const int lineSize);
+    static MediaDisplay *createSDLInstance(MediaMainControl *mainControl = nullptr);
+    static void destroySDLInstance(MediaDisplay*);
+
+    bool initVideoSetting(int width, int height, const char *title);
+    bool initAudioSetting(int freq, uint8_t channels, uint8_t silence, uint16_t samples);
+
     void exec();
 
+    void setVideoFrameQueue(FrameQueue* queue) { m_videoFrameQueue = queue; }
+    void setAudioFrameQueue(FrameQueue* queue) { m_audioFrameQueue = queue; }
+
     int m_fps = 0;
-    FrameQueue *m_frameQueue = nullptr;
 
 private:
-    MediaDisplay();
-    bool init(const char *title, SDL_Rect rect, MediaMainControl *mainControl);
+    MediaDisplay(MediaMainControl*);
+    void draw(const uint8_t *data, const int lineSize);
 
     ~MediaDisplay();
 
     static void msgOutput(const char*);
 
 private:
+
     std::unique_ptr<SDL_Window, void(*)(SDL_Window*)> m_window;
     std::unique_ptr<SDL_Renderer, void(*)(SDL_Renderer*)> m_renderer;
     std::unique_ptr<SDL_Texture, void(*)(SDL_Texture*)> m_texture;
@@ -46,6 +61,12 @@ private:
     SDL_Rect m_windowRect;
     SDL_Thread* m_SDLEventThread = nullptr;
     PlayState m_playState;
+
+    AudioBuffer m_audioBuffer;
+    SDL_AudioSpec m_audioSpec;
+
+    FrameQueue *m_videoFrameQueue = nullptr;
+    FrameQueue *m_audioFrameQueue = nullptr;
 
     MediaMainControl *m_mainControl = nullptr;
 };
