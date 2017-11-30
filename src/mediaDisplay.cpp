@@ -109,12 +109,15 @@ bool MediaDisplay::initAudioSetting(int freq, uint8_t channels, uint8_t silence,
     }
     m_audioBuffer.PCMBufferSize = freq * channels;
     m_audioBuffer.PCMBuffer = (uint8_t *)av_malloc(m_audioBuffer.PCMBufferSize);
+
+    m_playState.audioFrameDuration = samples / freq;
     return true;
 }
 
 static int event_thread(void* obaque)
 {
     PlayState *playState = reinterpret_cast<PlayState*>(obaque);
+    //init audio event
     SDL_Event event;
     event.type = REFRESH_AUDIO_EVENT;
     SDL_PushEvent(&event);
@@ -128,7 +131,7 @@ static int event_thread(void* obaque)
                 event.type = REFRESH_VIDEO_EVENT;
                 SDL_PushEvent(&event);
             }
-            SDL_Delay(playState->delay); //25fps
+            SDL_Delay(playState->delay);
         }
         SDL_Event event;
         event.type = BREAK_EVENT;
@@ -139,35 +142,56 @@ static int event_thread(void* obaque)
 
 void MediaDisplay::exec()
 {
-    m_playState.delay = 1000 / m_fps;
+    //if(m_audioFrameQueue == nullptr)
+        m_playState.delay = 1000 / m_fps;
+
     m_SDLEventThread = SDL_CreateThread(event_thread, NULL, &m_playState);
 
     AVFrame* videoFrameRaw = nullptr;
     videoFrameRaw = av_frame_alloc();
     AVFrame* audioFrameRaw = nullptr;
     audioFrameRaw = av_frame_alloc();
-
     while (true)
     {
         SDL_WaitEvent(&m_playState.SDLEvent);
-        if (m_playState.SDLEvent.type == REFRESH_VIDEO_EVENT)
+        if (m_videoFrameQueue->m_noMorePktToDecode && m_videoFrameQueue->m_queue.empty()
+            && m_audioFrameQueue->m_noMorePktToDecode && m_audioFrameQueue->m_queue.empty())
+        {
+            break;
+        }
+        else if (m_playState.SDLEvent.type == REFRESH_VIDEO_EVENT)
         {
             if(m_videoFrameQueue->m_noMorePktToDecode && m_videoFrameQueue->m_queue.empty())
                 continue;
             m_videoFrameQueue->deQueue(videoFrameRaw);
+
+            int curPts = av_frame_get_best_effort_timestamp(videoFrameRaw);
+            if (curPts != AV_NOPTS_VALUE)
+            {
+                m_playState.currentVideoTime = curPts * av_q2d(m_videoTimeBsse) * 1000;
+                m_playState.videoPreFrameDelay = (curPts - m_playState.videoPrePts) * av_q2d(m_videoTimeBsse) * 1000;
+                m_playState.videoPrePts = curPts;
+            }
+            getDelay();
+
             AVFrame *frameYUV = m_mainControl->convertFrametoYUV420(videoFrameRaw, m_windowRect.w, m_windowRect.h);
             av_frame_unref(videoFrameRaw);
             if(frameYUV != nullptr && frameYUV->linesize[0] != 0)
                 draw(frameYUV->data[0], frameYUV->linesize[0]);
         }
-        if (m_playState.SDLEvent.type == REFRESH_AUDIO_EVENT)
+        else if (m_playState.SDLEvent.type == REFRESH_AUDIO_EVENT)
         {
             if (m_audioFrameQueue->m_noMorePktToDecode && m_audioFrameQueue->m_queue.empty())
                 continue;
             m_audioFrameQueue->deQueue(audioFrameRaw);
             if (m_mainControl->convertFrametoPCM(audioFrameRaw, m_audioBuffer.PCMBuffer, m_audioBuffer.PCMBufferSize))
             {
+                if (audioFrameRaw->pkt_pts != AV_NOPTS_VALUE)
+                    m_playState.currentAudioTime = audioFrameRaw->pts * av_q2d(m_audioTimeBase) * 1000;
+                else
+                    m_playState.currentAudioTime += m_playState.audioFrameDuration;
                 if (m_audioSpec.samples != audioFrameRaw->nb_samples) {
+                    m_playState.audioFrameDuration = (double)audioFrameRaw->nb_samples / (double)m_audioSpec.freq * 1000;
                     SDL_CloseAudio();
                     m_audioSpec.samples = audioFrameRaw->nb_samples;
                     m_audioBuffer.PCMBufferSize = av_samples_get_buffer_size(NULL, m_audioSpec.channels, m_audioSpec.samples, AV_SAMPLE_FMT_S16, 1);
@@ -187,12 +211,34 @@ void MediaDisplay::exec()
         {
             break;
         }
-        else if (m_videoFrameQueue->m_noMorePktToDecode && m_videoFrameQueue->m_queue.empty()
-            && m_audioFrameQueue->m_noMorePktToDecode && m_audioFrameQueue->m_queue.empty())
-        {
-            break;
-        }
     }
+}
+
+void MediaDisplay::getDelay()
+{
+    double 		retDelay = 0.0;
+    double 		compare = 0.0;
+    double  	threshold = 0.0;
+
+    if (m_playState.currentVideoTime == 0 && m_playState.currentAudioTime == 0)
+    {
+        m_playState.delay = m_fps;
+        return;
+    }
+
+    compare = m_playState.currentVideoTime - m_playState.currentAudioTime;
+    threshold = m_playState.videoPreFrameDelay;
+    if (compare <= -threshold)
+        retDelay = threshold / 2;
+    else if (compare >= threshold)
+        retDelay = threshold * 2;
+    else
+        retDelay = threshold;
+
+    m_playState.delay = retDelay;
+
+    av_log(nullptr, AV_LOG_INFO, "currentVideoTime:%lf,currentAudioTime:%lf,compare:%lf,preFrameDelay:%lf\n",
+        m_playState.currentVideoTime, m_playState.currentAudioTime, compare, retDelay);
 }
 
 void MediaDisplay::draw(const uint8_t *data, const int lineSize)

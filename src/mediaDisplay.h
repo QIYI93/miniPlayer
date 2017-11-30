@@ -16,6 +16,11 @@ typedef struct PlayState
     bool pause = false;
     bool exit = false;
     int delay = 0;
+    double audioFrameDuration = 0.0;
+    double currentAudioTime = 0.0;
+    double currentVideoTime = 0.0;
+    int videoPrePts = 0;
+    double videoPreFrameDelay = 0.0;
     SDL_Event SDLEvent;
 }PlayState;
 
@@ -41,12 +46,15 @@ public:
 
     void setVideoFrameQueue(FrameQueue* queue) { m_videoFrameQueue = queue; }
     void setAudioFrameQueue(FrameQueue* queue) { m_audioFrameQueue = queue; }
+    void setVideoTimeBase(AVRational videoTimeBsse) { m_videoTimeBsse = videoTimeBsse; }
+    void setAudioTimeBase(AVRational audioTimeBsse) { m_audioTimeBase = audioTimeBsse; }
 
     int m_fps = 0;
 
 private:
     MediaDisplay(MediaMainControl*);
     void draw(const uint8_t *data, const int lineSize);
+    void getDelay();
 
     ~MediaDisplay();
 
@@ -67,6 +75,8 @@ private:
 
     FrameQueue *m_videoFrameQueue = nullptr;
     FrameQueue *m_audioFrameQueue = nullptr;
+    AVRational m_videoTimeBsse;
+    AVRational m_audioTimeBase;
 
     MediaMainControl *m_mainControl = nullptr;
 };

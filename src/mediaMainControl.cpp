@@ -156,7 +156,7 @@ void MediaMainControl::initSeparatePktThread()
             //enqueue packet
             if (pAVPacket->stream_index == m_audioStreamIndex)
             {
-                std::cout << "pktCount:" << ++pktCount << std::endl;
+                printf("pktCount:%d\n", ++pktCount);
                 m_audioPktQueue->enQueue(pAVPacket);
                 av_packet_unref(pAVPacket);
             }
@@ -208,7 +208,7 @@ void MediaMainControl::initDecodePktThread()
             //decode audio pkt
             if (!m_audioPktQueue->m_queue.empty())
             {
-                std::cout << "frameCount:" << ++frameCount << std::endl;
+                printf("frameCount:%d\n", ++frameCount);
                 m_audioPktQueue->deQueue(packet);
                 if (avcodec_send_packet(m_audioCodecCtx, packet) == NULL)
                 {
@@ -341,13 +341,15 @@ void MediaMainControl::play()
     if (m_videoStreamIndex != -1)
     {
         mediaDisplay->initVideoSetting(m_frameWidth, m_frameHeight, "window");
-        mediaDisplay->m_fps = m_fps;
         mediaDisplay->setVideoFrameQueue(m_videoFrameQueue);
+        mediaDisplay->setVideoTimeBase(m_formatCtx->streams[m_videoStreamIndex]->time_base);
+        mediaDisplay->m_fps = m_fps;
     }
     if (m_audioStreamIndex != -1)
     {
         mediaDisplay->initAudioSetting(m_audioCodecCtx->sample_rate, m_audioCodecCtx->channels, NULL, 1024);
         mediaDisplay->setAudioFrameQueue(m_audioFrameQueue);
+        mediaDisplay->setAudioTimeBase(m_formatCtx->streams[m_audioStreamIndex]->time_base);
     }
     mediaDisplay->exec();
     MediaDisplay::destroySDLInstance(mediaDisplay);
