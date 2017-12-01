@@ -5,6 +5,16 @@
 #include <mutex>
 #include "pktAndFramequeue.h"
 
+
+typedef struct AudioParams {
+    int freq;
+    int channels;
+    int64_t channelLayout;
+    enum AVSampleFormat fmt;
+    int frameSize;
+    int bytesPerSec;
+} AudioParams;
+
 class AVCodec;
 class SwsContext;
 class MediaDisplay;
@@ -60,7 +70,7 @@ private:
     int m_frameHeight = 0;
     int m_fps = 0;
     int64_t m_totalTimeMS = -1;
-
+    AudioParams m_audioParams;
     std::mutex m_mutex;
 
     bool m_noPktToSperate = false;
