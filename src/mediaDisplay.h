@@ -40,7 +40,7 @@ public:
     static void destroySDLInstance(MediaDisplay*);
 
     bool initVideoSetting(int width, int height, const char *title);
-    bool initAudioSetting(int freq, uint8_t wantedChannels, uint64_t wantedChannelLayout, AudioParams *audioParams);
+    bool initAudioSetting(int freq, uint8_t wantedChannels, uint64_t wantedChannelLayout, uint64_t sample, AudioParams *audioParams);
 
     void exec();
 

@@ -279,47 +279,52 @@ AVFrame* MediaMainControl::convertFrametoYUV420(AVFrame *src, const int width, c
     }
 }
 
-bool MediaMainControl::convertFrametoPCM(AVFrame* src, uint8_t *des, int len)
+bool MediaMainControl::convertFrametoPCM(AVFrame* src, uint8_t *des, int inLen, int *outLen)
 {
-    if (!des || !len)
+    if (!des || !inLen)
         return false;
     if(m_swrCtx == nullptr)
         m_swrCtx = swr_alloc();
 
-    //swr_alloc_set_opts(m_swrCtx, 
-    //    m_audioParams.channelLayout, 
-    //    m_audioParams.fmt, 
-    //    m_audioParams.freq,
-    //    m_audioCodecCtx->channel_layout,
-    //    m_audioCodecCtx->sample_fmt, 
-    //    m_audioCodecCtx->sample_rate,
-    //    NULL, NULL);
-
-    //if (!m_swrCtx || swr_init(m_swrCtx) < 0)
-    //{
-    //    av_log(NULL, AV_LOG_ERROR,
-    //        "Cannot create sample rate converter for conversion of %d Hz %s %d channels to %d Hz %s %d channels!\n",
-    //        m_audioCodecCtx->sample_rate, av_get_sample_fmt_name(m_audioCodecCtx->sample_fmt), m_audioCodecCtx->channels,
-    //        m_audioParams.freq, av_get_sample_fmt_name(m_audioParams.fmt), m_audioParams.channels);
-    //    swr_free(&m_swrCtx);
-    //    return false;
-    //}
-
-
-    swr_alloc_set_opts(m_swrCtx,
+    swr_alloc_set_opts(m_swrCtx, 
+        m_audioParams.channelLayout, 
+        m_audioParams.fmt, 
+        m_audioParams.freq,
         m_audioCodecCtx->channel_layout,
-        AV_SAMPLE_FMT_S16,
+        m_audioCodecCtx->sample_fmt, 
         m_audioCodecCtx->sample_rate,
-        m_audioCodecCtx->channel_layout,
-        m_audioCodecCtx->sample_fmt,
-        m_audioCodecCtx->sample_rate,
-        NULL, NULL
-        );
-    swr_init(m_swrCtx);
-    
-    int ret = swr_convert(m_swrCtx, &des, maxAudioFrameSize, (const uint8_t **)src->data, src->nb_samples);
-      if (ret <= 0)
+        NULL, NULL);
+
+    if (!m_swrCtx || swr_init(m_swrCtx) < 0)
+    {
+        av_log(NULL, AV_LOG_ERROR,
+            "Cannot create sample rate converter for conversion of %d Hz %s %d channels to %d Hz %s %d channels!\n",
+            m_audioCodecCtx->sample_rate, av_get_sample_fmt_name(m_audioCodecCtx->sample_fmt), m_audioCodecCtx->channels,
+            m_audioParams.freq, av_get_sample_fmt_name(m_audioParams.fmt), m_audioParams.channels);
+        swr_free(&m_swrCtx);
         return false;
+    }
+
+    int ret = swr_convert(m_swrCtx, &des, inLen, (const uint8_t **)src->data, src->nb_samples);
+    if (ret <= 0)
+        return false;
+
+    *outLen = ret * m_audioParams.frameSize;
+
+    //swr_alloc_set_opts(m_swrCtx,
+    //    m_audioCodecCtx->channel_layout,
+    //    AV_SAMPLE_FMT_S16,
+    //    m_audioCodecCtx->sample_rate,
+    //    m_audioCodecCtx->channel_layout,
+    //    m_audioCodecCtx->sample_fmt,
+    //    m_audioCodecCtx->sample_rate,
+    //    NULL, NULL
+    //    );
+    //swr_init(m_swrCtx);
+    //
+    //int ret = swr_convert(m_swrCtx, &des, maxAudioFrameSize, (const uint8_t **)src->data, src->nb_samples);
+    //  if (ret <= 0)
+    //    return false;
 
     return true;
 }
@@ -367,7 +372,7 @@ void MediaMainControl::play()
     }
     if (m_audioStreamIndex != -1)
     {
-        mediaDisplay->initAudioSetting(m_audioCodecCtx->sample_rate, m_audioCodecCtx->channels, m_audioCodecCtx->channel_layout, &m_audioParams);
+        mediaDisplay->initAudioSetting(m_audioCodecCtx->sample_rate, m_audioCodecCtx->channels, m_audioCodecCtx->channel_layout, NULL, &m_audioParams);
         mediaDisplay->setAudioFrameQueue(m_audioFrameQueue);
         mediaDisplay->setAudioTimeBase(m_formatCtx->streams[m_audioStreamIndex]->time_base);
     }
