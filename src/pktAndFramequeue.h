@@ -19,7 +19,8 @@ struct PacketQueue
     int m_maxElements = 0;
     bool m_readyToDequeue = false;
     std::mutex m_mutex;
-    std::condition_variable m_cond;
+    std::condition_variable m_condDeQueue;
+    std::condition_variable m_condEnQueue;
 
     PacketQueue() = default;
     ~PacketQueue();
@@ -36,7 +37,8 @@ struct FrameQueue
     bool m_noMorePktToDecode = false;
     bool m_readyToDequeue = false;
     std::mutex m_mutex;
-    std::condition_variable m_cond;
+    std::condition_variable m_condDeQueue;
+    std::condition_variable m_condEnQueue;
 
     FrameQueue() = default;
     ~FrameQueue();

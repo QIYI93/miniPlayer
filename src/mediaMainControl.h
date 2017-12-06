@@ -29,7 +29,6 @@ public:
     void closeFile();
 
     void play();
-    void pause();
     void stop();
 
     int64_t getDurationTime() { return m_totalTimeMS; }
@@ -42,8 +41,10 @@ private:
     MediaMainControl();
     ~MediaMainControl();
 
-    void initSeparatePktThread();
-    void initDecodePktThread();
+    void initPktQueue();
+    void initFrameQueue();
+    static void initSeparatePktThread(void *mainCtrl);
+    static void initDecodePktThread(void *mainCtrl);
     void cleanPktQueue();
     void cleanFrameQueue();
 
