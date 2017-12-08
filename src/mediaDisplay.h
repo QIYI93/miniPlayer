@@ -53,6 +53,7 @@ public:
 
 private:
     MediaDisplay(MediaMainControl*);
+    static void fillAudioBuffer(void *udata, Uint8 *stream, int len);
     void draw(const uint8_t *data, const int lineSize);
     void getDelay();
 

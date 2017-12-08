@@ -35,7 +35,7 @@ public:
     int getVideoStreamIndex() { return m_videoStreamIndex; }
     int getAudioStreamIndex() { return m_audioStreamIndex; }
     AVFrame* convertFrametoYUV420(AVFrame* src, const int width, const int height); //Do not manage returned buffer.
-    bool convertFrametoPCM(AVFrame* src, uint8_t *des, int inLen, int *outLen);
+    int convertFrametoPCM(AVFrame* src, uint8_t *des, int inLen);
 
 private:
     MediaMainControl();

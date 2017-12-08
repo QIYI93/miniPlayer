@@ -22,7 +22,7 @@ MediaDisplay* MediaDisplay::createSDLInstance(MediaMainControl *mainControl)
 {
     MediaDisplay *mediaDisplay = new MediaDisplay(mainControl);
 
-    if (SDL_Init(SDL_INIT_EVERYTHING) == -1)
+    if (SDL_Init(SDL_INIT_TIMER | SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_EVENTS) == -1)
     {
         msgOutput("SDL Init Failed");
         delete mediaDisplay;
@@ -76,26 +76,38 @@ bool MediaDisplay::initVideoSetting(int width, int height, const char *title)
 
     return true;
 }
-
-static void  fillAudioBuffer(void *udata, Uint8 *stream, int len)
+int count = 0;
+void MediaDisplay::fillAudioBuffer(void *udata, Uint8 *stream, int len)
 {
-    AudioBuffer *audioBuffer = static_cast<AudioBuffer*>(udata);
+    static AVFrame* audioFrameRaw = av_frame_alloc();
+
+    MediaDisplay *mediaDisplay = static_cast<MediaDisplay*>(udata);
+    AudioBuffer *audioBuffer = &mediaDisplay->m_audioBuffer;
     SDL_memset(stream, 0, len);
+    int len1;
+
     if (audioBuffer->PCMBufferSize == 0)
         return;
-    len = (len > audioBuffer->restSize ? audioBuffer->restSize : len);
 
-    SDL_MixAudio(stream, audioBuffer->pos, len, SDL_MIX_MAXVOLUME);
-    audioBuffer->pos += len;
-    audioBuffer->restSize -= len;
-
-    if (audioBuffer->restSize == NULL)
+    while (len > 0)
     {
-        SDL_Event event;
-        event.type = REFRESH_AUDIO_EVENT;
-        SDL_PushEvent(&event);
+        if (audioBuffer->restSize <= 0)
+        {
+            if (mediaDisplay->m_audioFrameQueue->m_queue.empty())
+                return;
+            mediaDisplay->m_audioFrameQueue->deQueue(audioFrameRaw);
+            //printf("audioFrameRaw count:%d,size%d\n", ++count, audioFrameRaw->pkt_size);
+            int outLen = mediaDisplay->m_mainControl->convertFrametoPCM(audioFrameRaw, audioBuffer->PCMBuffer, audioBuffer->PCMBufferSize);
+            av_frame_unref(audioFrameRaw);
+            audioBuffer->pos = audioBuffer->PCMBuffer;
+            audioBuffer->restSize = outLen;
+        }
+        len1 = (len > audioBuffer->restSize ? audioBuffer->restSize : len);
+        SDL_MixAudio(stream, audioBuffer->pos, len1, SDL_MIX_MAXVOLUME);
+        audioBuffer->pos += len1;
+        audioBuffer->restSize -= len1;
+        len -= len1;
     }
-
 }
 
 bool MediaDisplay::initAudioSetting(int freq, uint8_t wantedChannels, uint64_t wantedChannelLayout, uint64_t sample, AudioParams *audioParams)
@@ -130,7 +142,7 @@ bool MediaDisplay::initAudioSetting(int freq, uint8_t wantedChannels, uint64_t w
     wantedSpec.silence = 0;
     wantedSpec.samples = FFMAX(SDLAudioMinBufferSize, 2 << av_log2(wantedSpec.freq / SDLAduioMaxCallBackPerSec));
     wantedSpec.callback = fillAudioBuffer;
-    wantedSpec.userdata = &m_audioBuffer;
+    wantedSpec.userdata = this;
 
     while (SDL_OpenAudio(&wantedSpec, &m_audioSpec) < 0)
     {
@@ -175,37 +187,15 @@ bool MediaDisplay::initAudioSetting(int freq, uint8_t wantedChannels, uint64_t w
         return false;
     }
 
-    m_audioBuffer.PCMBufferSize = av_samples_get_buffer_size(NULL, m_audioSpec.channels, m_audioSpec.samples, AV_SAMPLE_FMT_S16, 1) * 2;
+    m_audioBuffer.PCMBufferSize = av_samples_get_buffer_size(NULL, m_audioSpec.channels, m_audioSpec.samples, AV_SAMPLE_FMT_S16, 1);
     m_audioBuffer.PCMBuffer = (uint8_t *)av_malloc(m_audioBuffer.PCMBufferSize);
     return true;
 
-    //m_audioSpec.freq = freq;
-    //m_audioSpec.format = AUDIO_S16SYS;
-    //m_audioSpec.channels = wantedChannels;
-    //m_audioSpec.silence = 0;
-    //m_audioSpec.samples = 2048;
-    //m_audioSpec.callback = fillAudioBuffer;
-    //m_audioSpec.userdata = &m_audioBuffer;
-
-    //if (SDL_OpenAudio(&m_audioSpec, NULL) < 0)
-    //{
-    //    msgOutput("Failed to open audio");
-    //    return false;
-    //}
-    //m_audioBuffer.PCMBufferSize = av_samples_get_buffer_size(NULL, m_audioSpec.channels, m_audioSpec.samples, AV_SAMPLE_FMT_S16, 1);
-    //m_audioBuffer.PCMBuffer = (uint8_t *)av_malloc(m_audioBuffer.PCMBufferSize);
-
-    //m_playState.audioFrameDuration = m_audioSpec.samples / freq;
-    //return true;
 }
 
 static int event_thread(void* obaque)
 {
     PlayState *playState = reinterpret_cast<PlayState*>(obaque);
-    //init audio event
-    SDL_Event event;
-    event.type = REFRESH_AUDIO_EVENT;
-    SDL_PushEvent(&event);
     while (true)
     {
         while (!playState->exit)
@@ -227,15 +217,15 @@ static int event_thread(void* obaque)
 
 void MediaDisplay::exec()
 {
-    //if(m_audioFrameQueue == nullptr)
-        m_playState.delay = 1000 / m_fps;
-
     m_SDLEventThread = SDL_CreateThread(event_thread, NULL, &m_playState);
+    if (m_audioBuffer.PCMBufferSize != NULL && m_audioBuffer.PCMBuffer != nullptr)
+    {
+        SDL_PauseAudio(0);
+    }
 
     AVFrame* videoFrameRaw = nullptr;
     videoFrameRaw = av_frame_alloc();
-    AVFrame* audioFrameRaw = nullptr;
-    audioFrameRaw = av_frame_alloc();
+    m_playState.delay = 1000 / m_fps;
     while (true)
     {
         SDL_WaitEvent(&m_playState.SDLEvent);
@@ -264,47 +254,6 @@ void MediaDisplay::exec()
             if(frameYUV != nullptr && frameYUV->linesize[0] != 0)
                 draw(frameYUV->data[0], frameYUV->linesize[0]);
         }
-        else if (m_playState.SDLEvent.type == REFRESH_AUDIO_EVENT)
-        {
-            if (m_audioFrameQueue->m_noMorePktToDecode && m_audioFrameQueue->m_queue.empty())
-                continue;
-
-            int outLen = 0;
-            int index = 0;
-            do
-            {
-                m_audioFrameQueue->deQueue(audioFrameRaw);
-                if (m_mainControl->convertFrametoPCM(audioFrameRaw, m_audioBuffer.PCMBuffer + index, m_audioBuffer.PCMBufferSize, &outLen))
-                {
-                    index += outLen;
-                }
-                av_frame_unref(audioFrameRaw);
-
-            } while (m_audioBuffer.PCMBufferSize - index > outLen);
-            m_audioBuffer.pos = m_audioBuffer.PCMBuffer;
-            m_audioBuffer.restSize = index;
-            SDL_PauseAudio(0);
-        }
-            //while (m_audioBuffer.pos - m_audioBuffer.PCMBuffer > 0)
-            //{
-            //   m_audioFrameQueue->deQueue(audioFrameRaw);
-            //   int outLen = 0;
-            //   int index = 0;
-            //   if (m_mainControl->convertFrametoPCM(audioFrameRaw, m_audioBuffer.PCMRestBuffer, m_audioBuffer.PCMBufferSize, &outLen))
-            //   {
-            //       //if (audioFrameRaw->pkt_pts != AV_NOPTS_VALUE)
-            //       //    m_playState.currentAudioTime = audioFrameRaw->pts * av_q2d(m_audioTimeBase) * 1000;
-            //       //else
-            //       //    m_playState.currentAudioTime += m_playState.audioFrameDuration;
-            //       //m_audioBuffer.PCMRestBufferDataLen = outLen;
-            //       //memcpy(m_audioBuffer.PCMBuffer + index, m_audioBuffer.PCMRestBuffer, FFMIN(m_audioBuffer.PCMRestBufferDataLen, m_audioBuffer.PCMBufferSize));
-            //       //if(m_audioBuffer.restSize > )
-            //       //m_audioBuffer.restSize = outLen;
-            //       //m_audioBuffer.pos = m_audioBuffer.PCMBuffer;
-            //       //SDL_PauseAudio(0);
-            //   }
-            //   av_frame_unref(audioFrameRaw);
-            //}
         else if (m_playState.SDLEvent.type == SDL_QUIT)
         {
             m_playState.exit = 1;
