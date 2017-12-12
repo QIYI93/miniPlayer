@@ -76,7 +76,7 @@ bool MediaDisplay::initVideoSetting(int width, int height, const char *title)
 
     return true;
 }
-int count = 0;
+
 void MediaDisplay::fillAudioBuffer(void *udata, Uint8 *stream, int len)
 {
     static AVFrame* audioFrameRaw = av_frame_alloc();
@@ -85,7 +85,7 @@ void MediaDisplay::fillAudioBuffer(void *udata, Uint8 *stream, int len)
     AudioBuffer *audioBuffer = &mediaDisplay->m_audioBuffer;
     SDL_memset(stream, 0, len);
     int len1;
-
+    int index = 0;
     if (audioBuffer->PCMBufferSize == 0)
         return;
 
@@ -96,14 +96,14 @@ void MediaDisplay::fillAudioBuffer(void *udata, Uint8 *stream, int len)
             if (mediaDisplay->m_audioFrameQueue->m_queue.empty())
                 return;
             mediaDisplay->m_audioFrameQueue->deQueue(audioFrameRaw);
-            //printf("audioFrameRaw count:%d,size%d\n", ++count, audioFrameRaw->pkt_size);
             int outLen = mediaDisplay->m_mainControl->convertFrametoPCM(audioFrameRaw, audioBuffer->PCMBuffer, audioBuffer->PCMBufferSize);
             av_frame_unref(audioFrameRaw);
             audioBuffer->pos = audioBuffer->PCMBuffer;
             audioBuffer->restSize = outLen;
         }
         len1 = (len > audioBuffer->restSize ? audioBuffer->restSize : len);
-        SDL_MixAudio(stream, audioBuffer->pos, len1, SDL_MIX_MAXVOLUME);
+        SDL_MixAudio(stream + index, audioBuffer->pos, len1, SDL_MIX_MAXVOLUME);
+        index += len1;
         audioBuffer->pos += len1;
         audioBuffer->restSize -= len1;
         len -= len1;

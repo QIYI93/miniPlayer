@@ -175,7 +175,7 @@ void MediaMainControl::initDecodePktThread(void *mainCtrl)
     {
         MediaMainControl *mainCtl = static_cast<MediaMainControl*>(d);
         AVFrame *frame = av_frame_alloc();
-        AVPacket *packet = (AVPacket*)av_malloc(sizeof(AVPacket));
+        AVPacket *videoPacket = av_packet_alloc();
         int videoFrameCount = 0;
         while (true)
         {
@@ -183,17 +183,17 @@ void MediaMainControl::initDecodePktThread(void *mainCtrl)
             //decode video pkt
             if (!mainCtl->m_videoPktQueue->m_queue.empty())
             {
-                mainCtl->m_videoPktQueue->deQueue(packet);
-                if (avcodec_send_packet(mainCtl->m_videoCodecCtx, packet) == NULL)
+                mainCtl->m_videoPktQueue->deQueue(videoPacket);
+                if (avcodec_send_packet(mainCtl->m_videoCodecCtx, videoPacket) == NULL)
                 {
                     if (avcodec_receive_frame(mainCtl->m_videoCodecCtx, frame) == NULL)
                     {
-                        //printf("video Frame Count:%d\n", ++videoFrameCount);
+                        printf("video frame count:%d\n", ++videoFrameCount);
                         mainCtl->m_videoFrameQueue->enQueue(frame);
                         av_frame_unref(frame);
                     }
                 }
-                av_packet_unref(packet);//crash
+                av_packet_unref(videoPacket);
             }
             {
                 std::unique_lock<std::mutex> lock(mainCtl->m_mutex);
@@ -203,7 +203,7 @@ void MediaMainControl::initDecodePktThread(void *mainCtrl)
                     break;
             }
         }
-        av_packet_free(&packet);
+        av_packet_free(&videoPacket);
         av_frame_free(&frame);
     };
 
@@ -211,7 +211,7 @@ void MediaMainControl::initDecodePktThread(void *mainCtrl)
     {
         MediaMainControl *mainCtl = static_cast<MediaMainControl*>(d);
         AVFrame *frame = av_frame_alloc();
-        AVPacket *packet = (AVPacket*)av_malloc(sizeof(AVPacket));
+        AVPacket *audioPacket = av_packet_alloc();
         int audioFrameCount = 0;
         while (true)
         {
@@ -219,17 +219,17 @@ void MediaMainControl::initDecodePktThread(void *mainCtrl)
             //decode audio pkt
             if (!mainCtl->m_audioPktQueue->m_queue.empty())
             {
-                mainCtl->m_audioPktQueue->deQueue(packet);
-                if (avcodec_send_packet(mainCtl->m_audioCodecCtx, packet) == NULL)
+                mainCtl->m_audioPktQueue->deQueue(audioPacket);
+                if (avcodec_send_packet(mainCtl->m_audioCodecCtx, audioPacket) == NULL)
                 {
                     while (avcodec_receive_frame(mainCtl->m_audioCodecCtx, frame) == NULL)
                     {
-                        //printf("audio Frame Count:%d\n", ++audioFrameCount);
+                        printf("audio Frame Count:%d\n", ++audioFrameCount);
                         mainCtl->m_audioFrameQueue->enQueue(frame);
                         av_frame_unref(frame);
                     }
                 }
-                av_packet_unref(packet);
+                av_packet_unref(audioPacket);
             }
             {
                 std::unique_lock<std::mutex> lock(mainCtl->m_mutex);
@@ -239,7 +239,7 @@ void MediaMainControl::initDecodePktThread(void *mainCtrl)
                     break;
             }
         }
-        av_packet_free(&packet);
+        av_packet_free(&audioPacket);
         av_frame_free(&frame);
     };
 
@@ -361,8 +361,8 @@ void MediaMainControl::initFrameQueue()
     cleanFrameQueue();
     m_videoFrameQueue = new FrameQueue();
     m_audioFrameQueue = new FrameQueue();
-    m_videoFrameQueue->m_maxElements = 30;
-    m_audioFrameQueue->m_maxElements = 100;
+    m_videoFrameQueue->m_maxElements = 50;
+    m_audioFrameQueue->m_maxElements = 50;
 }
 
 void MediaMainControl::play()
@@ -382,7 +382,7 @@ void MediaMainControl::play()
     }
     if (m_audioStreamIndex != -1)
     {
-        mediaDisplay->initAudioSetting(m_audioCodecCtx->sample_rate, 2, AV_CH_LAYOUT_STEREO, NULL, &m_audioParams);
+        mediaDisplay->initAudioSetting(m_audioCodecCtx->sample_rate, m_audioCodecCtx->channels, m_audioCodecCtx->channel_layout, NULL, &m_audioParams);
         mediaDisplay->setAudioFrameQueue(m_audioFrameQueue);
         mediaDisplay->setAudioTimeBase(m_formatCtx->streams[m_audioStreamIndex]->time_base);
     }
