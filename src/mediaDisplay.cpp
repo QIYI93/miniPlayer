@@ -74,6 +74,7 @@ bool MediaDisplay::initVideoSetting(int width, int height, const char *title)
         return false;
     }
 
+    m_playState.videoDisplay = true;
     return true;
 }
 
@@ -189,6 +190,8 @@ bool MediaDisplay::initAudioSetting(int freq, uint8_t wantedChannels, uint64_t w
 
     m_audioBuffer.PCMBufferSize = av_samples_get_buffer_size(NULL, m_audioSpec.channels, m_audioSpec.samples, AV_SAMPLE_FMT_S16, 1);
     m_audioBuffer.PCMBuffer = (uint8_t *)av_malloc(m_audioBuffer.PCMBufferSize);
+
+    m_playState.audioDisplay = true;
     return true;
 
 }
@@ -211,30 +214,33 @@ static int event_thread(void* obaque)
         SDL_Event event;
         event.type = BREAK_EVENT;
         SDL_PushEvent(&event);
+        break;
     }
     return 0;
 }
 
 void MediaDisplay::exec()
 {
-    m_SDLEventThread = SDL_CreateThread(event_thread, NULL, &m_playState);
-    if (m_audioBuffer.PCMBufferSize != NULL && m_audioBuffer.PCMBuffer != nullptr)
-    {
-        SDL_PauseAudio(0);
-    }
-
     AVFrame* videoFrameRaw = nullptr;
-    videoFrameRaw = av_frame_alloc();
-    m_playState.delay = 1000 / m_fps;
-    while (true)
+    if (m_playState.videoDisplay)
+    {
+        m_SDLEventThread = SDL_CreateThread(event_thread, NULL, &m_playState);
+        videoFrameRaw = av_frame_alloc();
+        if (m_fps > 0)
+            m_playState.delay = 1000 / m_fps;
+    }
+    if(m_playState.audioDisplay)
+        SDL_PauseAudio(0);
+
+    while (!m_quit)
     {
         SDL_WaitEvent(&m_playState.SDLEvent);
-        if (m_videoFrameQueue->m_noMorePktToDecode && m_videoFrameQueue->m_queue.empty()
-            && m_audioFrameQueue->m_noMorePktToDecode && m_audioFrameQueue->m_queue.empty())
+        if (m_videoFrameQueue->m_noMorePktToDecode && m_videoFrameQueue->m_queue.empty() &&
+            m_audioFrameQueue->m_noMorePktToDecode && m_audioFrameQueue->m_queue.empty())
         {
-            break;
+            m_playState.exit = 1;
         }
-        else if (m_playState.SDLEvent.type == REFRESH_VIDEO_EVENT)
+        if (m_playState.SDLEvent.type == REFRESH_VIDEO_EVENT)
         {
             if(m_videoFrameQueue->m_noMorePktToDecode && m_videoFrameQueue->m_queue.empty())
                 continue;
@@ -263,6 +269,7 @@ void MediaDisplay::exec()
             break;
         }
     }
+    av_frame_free(&videoFrameRaw);
 }
 
 void MediaDisplay::getDelay()

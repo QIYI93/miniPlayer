@@ -121,6 +121,9 @@ void MediaMainControl::closeFile()
     if (m_swsCtx)
         sws_freeContext(m_swsCtx);
 
+    if (m_swrCtx)
+        swr_free(&m_swrCtx);
+
     if (m_formatCtx)
         avformat_close_input(&m_formatCtx);
 }
@@ -181,26 +184,24 @@ void MediaMainControl::initDecodePktThread(void *mainCtrl)
         {
             if (!mainCtl->m_formatCtx) return;
             //decode video pkt
-            if (!mainCtl->m_videoPktQueue->m_queue.empty())
+            mainCtl->m_videoPktQueue->deQueue(videoPacket);
+            if (avcodec_send_packet(mainCtl->m_videoCodecCtx, videoPacket) == NULL)
             {
-                mainCtl->m_videoPktQueue->deQueue(videoPacket);
-                if (avcodec_send_packet(mainCtl->m_videoCodecCtx, videoPacket) == NULL)
+                if (avcodec_receive_frame(mainCtl->m_videoCodecCtx, frame) == NULL)
                 {
-                    if (avcodec_receive_frame(mainCtl->m_videoCodecCtx, frame) == NULL)
-                    {
-                        printf("video frame count:%d\n", ++videoFrameCount);
-                        mainCtl->m_videoFrameQueue->enQueue(frame);
-                        av_frame_unref(frame);
-                    }
+                    //printf("video frame count:%d\n", ++videoFrameCount);
+                    mainCtl->m_videoFrameQueue->enQueue(frame);
+                    av_frame_unref(frame);
                 }
-                av_packet_unref(videoPacket);
             }
+            av_packet_unref(videoPacket);
             {
                 std::unique_lock<std::mutex> lock(mainCtl->m_mutex);
                 if (mainCtl->m_noPktToSperate && mainCtl->m_videoPktQueue->m_queue.empty())
+                {
                     mainCtl->m_videoFrameQueue->m_noMorePktToDecode = true;
-                if(mainCtl->m_videoFrameQueue->m_noMorePktToDecode)
                     break;
+                }
             }
         }
         av_packet_free(&videoPacket);
@@ -217,26 +218,24 @@ void MediaMainControl::initDecodePktThread(void *mainCtrl)
         {
             if (!mainCtl->m_formatCtx) return;
             //decode audio pkt
-            if (!mainCtl->m_audioPktQueue->m_queue.empty())
+            mainCtl->m_audioPktQueue->deQueue(audioPacket);
+            if (avcodec_send_packet(mainCtl->m_audioCodecCtx, audioPacket) == NULL)
             {
-                mainCtl->m_audioPktQueue->deQueue(audioPacket);
-                if (avcodec_send_packet(mainCtl->m_audioCodecCtx, audioPacket) == NULL)
+                while (avcodec_receive_frame(mainCtl->m_audioCodecCtx, frame) == NULL)
                 {
-                    while (avcodec_receive_frame(mainCtl->m_audioCodecCtx, frame) == NULL)
-                    {
-                        printf("audio Frame Count:%d\n", ++audioFrameCount);
-                        mainCtl->m_audioFrameQueue->enQueue(frame);
-                        av_frame_unref(frame);
-                    }
+                    //printf("audio Frame Count:%d\n", ++audioFrameCount);
+                    mainCtl->m_audioFrameQueue->enQueue(frame);
+                    av_frame_unref(frame);
                 }
-                av_packet_unref(audioPacket);
             }
+            av_packet_unref(audioPacket);
             {
                 std::unique_lock<std::mutex> lock(mainCtl->m_mutex);
                 if (mainCtl->m_noPktToSperate && mainCtl->m_audioPktQueue->m_queue.empty())
+                {
                     mainCtl->m_audioFrameQueue->m_noMorePktToDecode = true;
-                if (mainCtl->m_audioFrameQueue->m_noMorePktToDecode)
                     break;
+                }
             }
         }
         av_packet_free(&audioPacket);

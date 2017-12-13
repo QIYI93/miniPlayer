@@ -15,12 +15,14 @@ typedef struct PlayState
 {
     bool pause = false;
     bool exit = false;
-    int delay = 0;
+    int32_t delay = 100;
     double audioFrameDuration = 0.0;
     double currentAudioTime = 0.0;
     double currentVideoTime = 0.0;
     int videoPrePts = 0;
     double videoPreFrameDelay = 0.0;
+    bool audioDisplay = false;
+    bool videoDisplay = false;
     SDL_Event SDLEvent;
 }PlayState;
 
@@ -80,6 +82,9 @@ private:
     AVRational m_audioTimeBase;
 
     MediaMainControl *m_mainControl = nullptr;
+
+    bool m_quit = false;
+
 };
 
 #endif
