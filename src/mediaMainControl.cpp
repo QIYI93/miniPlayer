@@ -105,6 +105,7 @@ bool MediaMainControl::openFile(const char *file)
             msgOutput(m_errMsgBuffer);
         }
     }
+    m_file = file;
     return true;
 }
 
@@ -371,22 +372,20 @@ void MediaMainControl::play()
     initSeparatePktThread(this);
     initDecodePktThread(this);
 
-    MediaDisplay *mediaDisplay = MediaDisplay::createSDLInstance(this);
+    MediaDisplay *mediaDisplay = MediaDisplay::createDisplayInstance(this, DisplayType::USING_SDL);
     if (m_videoStreamIndex != -1)
     {
-        mediaDisplay->initVideoSetting(m_frameWidth, m_frameHeight, "window");
-        mediaDisplay->setVideoFrameQueue(m_videoFrameQueue);
-        mediaDisplay->setVideoTimeBase(m_formatCtx->streams[m_videoStreamIndex]->time_base);
-        mediaDisplay->m_fps = m_fps;
+        mediaDisplay->initVideoSetting(m_frameWidth, m_frameHeight, m_file.c_str());
+        mediaDisplay->setVideoTimeBase(m_formatCtx->streams[m_videoStreamIndex]->time_base.num, m_formatCtx->streams[m_videoStreamIndex]->time_base.den);
+        mediaDisplay->setFps(m_fps);
     }
     if (m_audioStreamIndex != -1)
     {
-        mediaDisplay->initAudioSetting(m_audioCodecCtx->sample_rate, m_audioCodecCtx->channels, m_audioCodecCtx->channel_layout, NULL, &m_audioParams);
-        mediaDisplay->setAudioFrameQueue(m_audioFrameQueue);
-        mediaDisplay->setAudioTimeBase(m_formatCtx->streams[m_audioStreamIndex]->time_base);
+        mediaDisplay->initAudioSetting(m_audioCodecCtx->sample_rate, m_audioCodecCtx->channels, m_audioCodecCtx->channel_layout, NULL);
+        mediaDisplay->setAudioTimeBase(m_formatCtx->streams[m_audioStreamIndex]->time_base.num, m_formatCtx->streams[m_audioStreamIndex]->time_base.den);
     }
     mediaDisplay->exec();
-    MediaDisplay::destroySDLInstance(mediaDisplay);
+    MediaDisplay::destroyDisplayInstance(mediaDisplay);
 }
 
 void MediaMainControl::stop()

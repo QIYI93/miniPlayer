@@ -64,6 +64,7 @@ private:
     FrameQueue *m_audioFrameQueue = nullptr;
 
     char *m_errMsgBuffer = nullptr;
+    std::string m_file;
 
     int m_videoStreamIndex = -1;
     int m_audioStreamIndex = -1;
