@@ -69,7 +69,7 @@ bool MediaMainControl::openFile(const char *file)
     m_audioStreamIndex = av_find_best_stream(m_formatCtx, AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, NULL);
 
     //Open video and audio codec and create codec context
-    if(m_videoStreamIndex != -1)
+    if(m_videoStreamIndex >= 0)
         m_videoCodec = avcodec_find_decoder(m_formatCtx->streams[m_videoStreamIndex]->codecpar->codec_id);
     if (m_videoCodec == nullptr)
         msgOutput("Not found video decoder.");
@@ -86,11 +86,11 @@ bool MediaMainControl::openFile(const char *file)
             av_strerror(ret, m_errMsgBuffer, errMsgBufferSize);
             msgOutput(m_errMsgBuffer);
         }
+        m_frameWidth = m_videoCodecCtx->coded_width;
+        m_frameHeight = m_videoCodecCtx->coded_height;
     }
-    m_frameWidth = m_videoCodecCtx->coded_width;
-    m_frameHeight = m_videoCodecCtx->coded_height;
 
-    if (m_audioStreamIndex != -1)
+    if (m_audioStreamIndex >= 0)
         m_audioCodec = avcodec_find_decoder(m_formatCtx->streams[m_audioStreamIndex]->codecpar->codec_id);
     if (m_audioCodec == nullptr)
         msgOutput("Not found audio decoder.");
@@ -319,6 +319,48 @@ int MediaMainControl::convertFrametoPCM(AVFrame* src, uint8_t *des, int inLen)
     return ret * m_audioParams.frameSize;
 }
 
+bool MediaMainControl::getGraphicData(GraphicDataType type, int width, int height, void *data, const uint32_t size, int *lineSize, int64_t *pts)
+{
+    switch (type)
+    {
+    case GraphicDataType::YUV420:
+        m_swsCtx = sws_getCachedContext(m_swsCtx,
+            m_videoCodecCtx->width, m_videoCodecCtx->height,
+            m_videoCodecCtx->pix_fmt,
+            width, height,
+            AV_PIX_FMT_YUV420P,
+            SWS_BICUBIC,
+            nullptr, nullptr, nullptr);
+        break;
+    default:
+        break;
+    }
+
+    if (!m_swsCtx)
+    {
+        msgOutput("sws_getCachedContext failed.");
+        return false;
+    }
+    AVFrame* videoFrameRaw = nullptr;
+    uint8_t *rawData[AV_NUM_DATA_POINTERS] = { 0 };
+    rawData[0] = reinterpret_cast<uint8_t *>(data);
+    videoFrameRaw = av_frame_alloc();
+    m_videoFrameQueue->deQueue(videoFrameRaw);
+    int ret = sws_scale(m_swsCtx, (const uint8_t* const*)videoFrameRaw->data, videoFrameRaw->linesize, 0, m_videoCodecCtx->height, rawData, lineSize);
+    av_frame_unref(videoFrameRaw);
+
+    if (ret > 0)
+        return true;
+    else
+        return false;
+}
+
+bool MediaMainControl::getPCMData(void *data, const uint32_t size, int64_t *pts, const AudioParams para)
+{
+    return true; 
+}
+
+
 void MediaMainControl::cleanPktQueue()
 {
     if (m_videoPktQueue != nullptr)
@@ -373,17 +415,17 @@ void MediaMainControl::play()
     initDecodePktThread(this);
 
     MediaDisplay *mediaDisplay = MediaDisplay::createDisplayInstance(this, DisplayType::USING_SDL);
-    if (m_videoStreamIndex != -1)
+    if (m_videoStreamIndex >= 0)
     {
         mediaDisplay->initVideoSetting(m_frameWidth, m_frameHeight, m_file.c_str());
         mediaDisplay->setVideoTimeBase(m_formatCtx->streams[m_videoStreamIndex]->time_base.num, m_formatCtx->streams[m_videoStreamIndex]->time_base.den);
         mediaDisplay->setFps(m_fps);
     }
-    if (m_audioStreamIndex != -1)
-    {
-        mediaDisplay->initAudioSetting(m_audioCodecCtx->sample_rate, m_audioCodecCtx->channels, m_audioCodecCtx->channel_layout, NULL);
-        mediaDisplay->setAudioTimeBase(m_formatCtx->streams[m_audioStreamIndex]->time_base.num, m_formatCtx->streams[m_audioStreamIndex]->time_base.den);
-    }
+    //if (m_audioStreamIndex >= 0)
+    //{
+    //    mediaDisplay->initAudioSetting(m_audioCodecCtx->sample_rate, m_audioCodecCtx->channels, m_audioCodecCtx->channel_layout, NULL);
+    //    mediaDisplay->setAudioTimeBase(m_formatCtx->streams[m_audioStreamIndex]->time_base.num, m_formatCtx->streams[m_audioStreamIndex]->time_base.den);
+    //}
     mediaDisplay->exec();
     MediaDisplay::destroyDisplayInstance(mediaDisplay);
 }

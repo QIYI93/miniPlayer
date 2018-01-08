@@ -1,31 +1,37 @@
-//#ifndef MEDIADISPLAY_H
-//#define MEDIADISPLAY_H
-//
-//#include <memory>
-//#include <mutex>
-//
-//extern "C"
-//{
-//#include "SDL.h"
-//}
-//#include "pktAndFramequeue.h"
-//#include "mediaMainControl.h"
-//
-//typedef struct PlayState
-//{
-//    bool pause = false;
-//    bool exit = false;
-//    int32_t delay = 100;
-//    double audioFrameDuration = 0.0;
-//    double currentAudioTime = 0.0;
-//    double currentVideoTime = 0.0;
-//    int videoPrePts = 0;
-//    double videoPreFrameDelay = 0.0;
-//    bool audioDisplay = false;
-//    bool videoDisplay = false;
-//    SDL_Event SDLEvent;
-//}PlayState;
-//
+#ifndef MEDIADISPLAY_SDL_H
+#define MEDIADISPLAY_SDL_H
+
+#include <memory>
+#include <mutex>
+
+extern "C"
+{
+#include "SDL.h"
+}
+#include "mediaDisplay.h"
+
+typedef struct PlayState
+{
+    bool pause = false;
+    bool exit = false;
+    int32_t delay = 100;
+    double audioFrameDuration = 0.0;
+    double currentAudioTime = 0.0;
+    double currentVideoTime = 0.0;
+    int videoPrePts = 0;
+    double videoPreFrameDelay = 0.0;
+    bool audioDisplay = false;
+    bool videoDisplay = false;             //used
+    SDL_Event SDLEvent;
+}PlayState;
+
+typedef struct videoBuffer
+{
+    uint8_t *data[AV_NUM_DATA_POINTERS] = { 0 };
+    int  lineSize[AV_NUM_DATA_POINTERS] = { 0 };
+    uint32_t size;
+}videoBuffer;
+
 //typedef struct AudioBuffer
 //{
 //    uint8_t *PCMBuffer = nullptr;
@@ -33,58 +39,47 @@
 //    uint8_t *pos = 0;
 //    int restSize = 0;
 //}AudioBuffer;
-//
-//class MediaMainControl;
-//class MediaDisplay
-//{
-//public:
-//    static MediaDisplay *createSDLInstance(MediaMainControl *mainControl = nullptr);
-//    static void destroySDLInstance(MediaDisplay*);
-//
-//    bool initVideoSetting(int width, int height, const char *title);
-//    bool initAudioSetting(int freq, uint8_t wantedChannels, uint64_t wantedChannelLayout, uint64_t sample, AudioParams *audioParams);
-//
-//    void exec();
-//
-//    void setVideoFrameQueue(FrameQueue* queue) { m_videoFrameQueue = queue; }
-//    void setAudioFrameQueue(FrameQueue* queue) { m_audioFrameQueue = queue; }
-//    void setVideoTimeBase(AVRational videoTimeBsse) { m_videoTimeBsse = videoTimeBsse; }
-//    void setAudioTimeBase(AVRational audioTimeBsse) { m_audioTimeBase = audioTimeBsse; }
-//
-//    int m_fps = 0;
-//
-//private:
-//    MediaDisplay(MediaMainControl*);
-//    static void fillAudioBuffer(void *udata, Uint8 *stream, int len);
-//    void draw(const uint8_t *data, const int lineSize);
-//    void getDelay();
-//
-//    ~MediaDisplay();
-//
-//    static void msgOutput(const char*);
-//
-//private:
-//
-//    std::unique_ptr<SDL_Window, void(*)(SDL_Window*)> m_window;
-//    std::unique_ptr<SDL_Renderer, void(*)(SDL_Renderer*)> m_renderer;
-//    std::unique_ptr<SDL_Texture, void(*)(SDL_Texture*)> m_texture;
-//
-//    SDL_Rect m_windowRect;
-//    SDL_Thread* m_SDLEventThread = nullptr;
-//    PlayState m_playState;
-//
-//    AudioBuffer m_audioBuffer;
-//    SDL_AudioSpec m_audioSpec;
-//
-//    FrameQueue *m_videoFrameQueue = nullptr;
-//    FrameQueue *m_audioFrameQueue = nullptr;
-//    AVRational m_videoTimeBsse;
-//    AVRational m_audioTimeBase;
-//
-//    MediaMainControl *m_mainControl = nullptr;
-//
-//    bool m_quit = false;
-//
-//};
-//
-//#endif
+
+class MediaDisplay_SDL : public MediaDisplay
+{
+public:
+    MediaDisplay_SDL(MediaMainControl *mainCtrl);
+
+    virtual bool init() override;
+    virtual bool initVideoSetting(int width, int height, const char *title) override;
+    //virtual bool initAudioSetting(int freq, uint8_t wantedChannels, uint64_t wantedChannelLayout, uint64_t sample) override;
+
+    virtual void exec() override;
+
+private:
+    MediaDisplay_SDL(MediaDisplay_SDL&) = delete;
+    ~MediaDisplay_SDL();
+
+
+    //static void fillAudioBuffer(void *udata, Uint8 *stream, int len);
+    void draw(const uint8_t *data, const int lineSize);
+    //void getDelay();
+
+
+
+    //static void msgOutput(const char*);
+
+private:
+    std::unique_ptr<SDL_Window, void(*)(SDL_Window*)> m_window;
+    std::unique_ptr<SDL_Renderer, void(*)(SDL_Renderer*)> m_renderer;
+    std::unique_ptr<SDL_Texture, void(*)(SDL_Texture*)> m_texture;
+
+    SDL_Rect m_windowRect;
+    SDL_Thread* m_SDLEventThread = nullptr;
+    PlayState m_playState;
+
+    videoBuffer m_videoBuffer;
+    //AudioBuffer m_audioBuffer;
+
+    SDL_AudioSpec m_audioSpec;
+
+    bool m_quit = false;
+
+};
+
+#endif

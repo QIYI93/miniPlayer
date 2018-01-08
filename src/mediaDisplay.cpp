@@ -1,4 +1,8 @@
 #include "mediaDisplay.h"
+
+#include <iostream>
+#include <string>
+
 #include "mediaDisplay_SDL.h"
 //#include "mediaDisplay_DirectX.h"
 //#include "mediaDisplay_OpenGL.h"
@@ -22,7 +26,7 @@ MediaDisplay* MediaDisplay::createDisplayInstance(MediaMainControl* mainCtrl, Di
     switch (type)
     {
     case DisplayType::USING_SDL:
-        //mediaDisplay = new mediaDisplay_SDL();
+        mediaDisplay = new MediaDisplay_SDL(mainCtrl);
         break;
     case DisplayType::USING_DIRECTX:
         //mediaDisplay = new mediaDisplay_DirectX();
@@ -41,4 +45,42 @@ void MediaDisplay::destroyDisplayInstance(MediaDisplay *instance)
 {
     if (instance != nullptr)
         delete instance;
+}
+
+
+
+void MediaDisplay::msgOutput(MsgType type, const char* msg)
+{
+    std::unique_lock<std::mutex> lock(m_mutex_msg);
+    std::string str1, str2;
+    switch (m_displayType)
+    {
+    case DisplayType::USING_SDL:
+        str1 = "[SDL]:";
+        break;
+    case DisplayType::USING_DIRECTX:
+        str1 = "[DirectX]:";
+        break;
+    case DisplayType::USING_OPENGL:
+        str1 = "[OpenGl]:";
+        break;
+    default:
+        break;
+    }
+    switch (type)
+    {
+    case MsgType::MSG_ERROR:
+        str2 = "<error> ";
+        break;
+    case MsgType::MSG_WARNING:
+        str2 = "<warning> ";
+        break;
+    case MsgType::MSG_INFO:
+        str2 = "<info> ";
+        break;
+    default:
+        break;
+    }
+
+    std::cout << str1 << str2  << msg << std::endl;
 }

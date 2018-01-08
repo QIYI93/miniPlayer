@@ -15,6 +15,11 @@ typedef struct AudioParams {
     int bytesPerSec;
 } AudioParams;
 
+enum class GraphicDataType :int
+{
+    YUV420 = 0,
+};
+
 class AVCodec;
 class SwsContext;
 class MediaDisplay;
@@ -36,6 +41,12 @@ public:
     int getAudioStreamIndex() { return m_audioStreamIndex; }
     AVFrame* convertFrametoYUV420(AVFrame* src, const int width, const int height); //Do not manage returned buffer.
     int convertFrametoPCM(AVFrame* src, uint8_t *des, int inLen);
+
+    bool getGraphicData(GraphicDataType type, int width, int height, void *data, const uint32_t size, int *lineSize, int64_t *pts);
+    bool getPCMData(void *data, const uint32_t size, int64_t *pts, const AudioParams para);
+
+    bool isAudioFrameEmpty() { return m_audioFrameQueue->m_noMorePktToDecode && m_audioFrameQueue->m_queue.empty(); }
+    bool isVideoFrameEmpty() { return m_videoFrameQueue->m_noMorePktToDecode && m_videoFrameQueue->m_queue.empty(); }
 
 private:
     MediaMainControl();
