@@ -1,5 +1,6 @@
 #include "mediaDisplay.h"
 
+#include <stdarg.h>
 #include <iostream>
 #include <string>
 
@@ -49,7 +50,7 @@ void MediaDisplay::destroyDisplayInstance(MediaDisplay *instance)
 
 
 
-void MediaDisplay::msgOutput(MsgType type, const char* msg)
+void MediaDisplay::msgOutput(MsgType type, const char* msg, ...)
 {
     std::unique_lock<std::mutex> lock(m_mutex_msg);
     std::string str1, str2;
@@ -82,5 +83,12 @@ void MediaDisplay::msgOutput(MsgType type, const char* msg)
         break;
     }
 
-    std::cout << str1 << str2  << msg << std::endl;
+    va_list args;
+
+    va_start(args, msg);
+    char out[4096];
+    vsnprintf(out, sizeof(out), msg, args);
+    va_end(args);
+
+    std::cout << str1 << str2  << out << std::endl;
 }

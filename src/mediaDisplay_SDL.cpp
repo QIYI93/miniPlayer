@@ -19,22 +19,11 @@ namespace
     auto const REFRESH_AUDIO_EVENT = SDL_USEREVENT + 2;
     auto const BREAK_EVENT = SDL_USEREVENT + 3;
 
-    //copy from ffplay
-    auto const SDLAudioMinBufferSize = 512;
-    auto const SDLAduioMaxCallBackPerSec = 30;
+
+    auto const SDLAudioMinBufferSize = 512;     //copy from ffplay
+    auto const SDLAduioMaxCallBackPerSec = 30;  //copy from ffplay
 }
 
-//MediaDisplay* MediaDisplay::createSDLInstance(MediaMainControl *mainControl)
-//{
-
-//}
-//
-//void MediaDisplay::destroySDLInstance(MediaDisplay *instance)
-//{
-//    if (instance != nullptr)
-//        delete instance;
-//}
-//
 MediaDisplay_SDL::MediaDisplay_SDL(MediaMainControl *mainCtrl)
     :MediaDisplay(mainCtrl)
     , m_window(nullptr, SDL_DestroyWindow)
@@ -47,7 +36,7 @@ MediaDisplay_SDL::MediaDisplay_SDL(MediaMainControl *mainCtrl)
 MediaDisplay_SDL::~MediaDisplay_SDL()
 {
     SDL_Quit();
-    free(m_videoBuffer.data);
+    av_free(*m_videoBuffer.data);
 }
 
 bool MediaDisplay_SDL::init()
@@ -92,124 +81,125 @@ bool MediaDisplay_SDL::initVideoSetting(int width, int height, const char *title
     m_playState.videoDisplay = true;
     return true;
 }
-//
-//void MediaDisplay::fillAudioBuffer(void *udata, Uint8 *stream, int len)
-//{
-//    static AVFrame* audioFrameRaw = av_frame_alloc();
-//
-//    MediaDisplay *mediaDisplay = static_cast<MediaDisplay*>(udata);
-//    AudioBuffer *audioBuffer = &mediaDisplay->m_audioBuffer;
-//    SDL_memset(stream, 0, len);
-//    int len1;
-//    int index = 0;
-//    if (audioBuffer->PCMBufferSize == 0)
-//        return;
-//
-//    while (len > 0)
-//    {
-//        if (audioBuffer->restSize <= 0)
-//        {
-//            if (mediaDisplay->m_audioFrameQueue->m_queue.empty())
-//                return;
-//            mediaDisplay->m_audioFrameQueue->deQueue(audioFrameRaw);
-//            int outLen = mediaDisplay->m_mainControl->convertFrametoPCM(audioFrameRaw, audioBuffer->PCMBuffer, audioBuffer->PCMBufferSize);
-//            av_frame_unref(audioFrameRaw);
-//            audioBuffer->pos = audioBuffer->PCMBuffer;
-//            audioBuffer->restSize = outLen;
-//        }
-//        len1 = (len > audioBuffer->restSize ? audioBuffer->restSize : len);
-//        SDL_MixAudio(stream + index, audioBuffer->pos, len1, SDL_MIX_MAXVOLUME);
-//        index += len1;
-//        audioBuffer->pos += len1;
-//        audioBuffer->restSize -= len1;
-//        len -= len1;
-//    }
-//}
-//
-//bool MediaDisplay::initAudioSetting(int freq, uint8_t wantedChannels, uint64_t wantedChannelLayout, uint64_t sample, AudioParams *audioParams)
-//{
-//    SDL_AudioSpec wantedSpec;
-//    const char *env;
-//    static const int nextChannels[] = { 0, 0, 1, 6, 2, 6, 4, 6 };
-//    static const int nextSampleRates[] = { 0, 44100, 48000, 96000, 192000 };
-//    int nextSampleRateIdx = FF_ARRAY_ELEMS(nextSampleRates) - 1;
-//
-//    env = SDL_getenv("SDL_AUDIO_CHANNELS");
-//    if (env) {
-//        wantedChannels = atoi(env);
-//        wantedChannelLayout = av_get_default_channel_layout(wantedChannels);
-//    }
-//    if (!wantedChannelLayout || wantedChannels != av_get_channel_layout_nb_channels(wantedChannelLayout))
-//    {
-//        wantedChannelLayout = av_get_default_channel_layout(wantedChannels);
-//        wantedChannelLayout &= ~AV_CH_LAYOUT_STEREO_DOWNMIX;
-//    }
-//    wantedChannels = av_get_channel_layout_nb_channels(wantedChannelLayout);
-//    wantedSpec.channels = wantedChannels;
-//    wantedSpec.freq = freq;
-//    if (wantedSpec.freq <= 0 || wantedSpec.channels <= 0)
-//    {
-//        av_log(NULL, AV_LOG_ERROR, "Invalid sample rate or channel count!\n");
-//        return false;
-//    }
-//    while (nextSampleRateIdx && nextSampleRates[nextSampleRateIdx] >= wantedSpec.freq)
-//        nextSampleRateIdx--;
-//    wantedSpec.format = AUDIO_S16SYS;
-//    wantedSpec.silence = 0;
-//    wantedSpec.samples = FFMAX(SDLAudioMinBufferSize, 2 << av_log2(wantedSpec.freq / SDLAduioMaxCallBackPerSec));
-//    wantedSpec.callback = fillAudioBuffer;
-//    wantedSpec.userdata = this;
-//
-//    while (SDL_OpenAudio(&wantedSpec, &m_audioSpec) < 0)
-//    {
-//        av_log(NULL, AV_LOG_WARNING, "SDL_OpenAudio (%d channels, %d Hz): %s\n",
-//            wantedSpec.channels, wantedSpec.freq, SDL_GetError());
-//        wantedSpec.channels = nextChannels[FFMIN(7, wantedSpec.channels)];
-//        if (!wantedSpec.channels)
-//        {
-//            wantedSpec.freq = nextSampleRates[nextSampleRateIdx--];
-//            wantedSpec.channels = wantedChannels;
-//            if (!wantedSpec.freq)
-//            {
-//                av_log(NULL, AV_LOG_ERROR, "No more combinations to try, audio open failed\n");
-//                return false;
-//            }
-//        }
-//        wantedChannelLayout = av_get_default_channel_layout(wantedSpec.channels);
-//    }
-//    if (m_audioSpec.format != AUDIO_S16SYS)
-//    {
-//        av_log(NULL, AV_LOG_ERROR, "SDL advised audio format %d is not supported!\n", m_audioSpec.format);
-//        return false;
-//    }
-//    if (m_audioSpec.channels != wantedSpec.channels)
-//    {
-//        wantedChannelLayout = av_get_default_channel_layout(m_audioSpec.channels);
-//        if (!wantedChannelLayout)
-//        {
-//            av_log(NULL, AV_LOG_ERROR, "SDL advised channel count %d is not supported!\n", m_audioSpec.channels);
-//            return -1;
-//        }
-//    }
-//    audioParams->fmt = AV_SAMPLE_FMT_S16;
-//    audioParams->freq = m_audioSpec.freq;
-//    audioParams->channelLayout = wantedChannelLayout;
-//    audioParams->channels = m_audioSpec.channels;
-//    audioParams->frameSize = av_samples_get_buffer_size(NULL, audioParams->channels, 1, audioParams->fmt, 1);
-//    audioParams->bytesPerSec = av_samples_get_buffer_size(NULL, audioParams->channels, audioParams->freq, audioParams->fmt, 1);
-//    if (audioParams->bytesPerSec <= 0 || audioParams->frameSize <= 0)
-//    {
-//        av_log(NULL, AV_LOG_ERROR, "av_samples_get_buffer_size failed\n");
-//        return false;
-//    }
-//
-//    m_audioBuffer.PCMBufferSize = av_samples_get_buffer_size(NULL, m_audioSpec.channels, m_audioSpec.samples, AV_SAMPLE_FMT_S16, 1);
-//    m_audioBuffer.PCMBuffer = (uint8_t *)av_malloc(m_audioBuffer.PCMBufferSize);
-//
-//    m_playState.audioDisplay = true;
-//    return true;
-//
-//}
+
+void MediaDisplay_SDL::fillAudioBuffer(void *udata, Uint8 *stream, int len)
+{
+        static AVFrame* audioFrameRaw = av_frame_alloc();
+    
+        MediaDisplay_SDL *mediaDisplay = static_cast<MediaDisplay_SDL*>(udata);
+        AudioBuffer *audioBuffer = &mediaDisplay->m_audioBuffer;
+        SDL_memset(stream, 0, len);
+        int len1;
+        int index = 0;
+        if (audioBuffer->PCMBufferSize == 0)
+            return;
+    
+        while (len > 0)
+        {
+            if (audioBuffer->restSize <= 0)
+            {
+                if(mediaDisplay->m_mainCtrl->isAudioFrameEmpty())
+                    return;
+                int64_t outlen = 0;
+                if (mediaDisplay->m_mainCtrl->getPCMData(audioBuffer->PCMBuffer, audioBuffer->PCMBufferSize, mediaDisplay->m_audioParams, &mediaDisplay->m_playState.currentAudioTime, &outlen))
+                {
+                    audioBuffer->pos = audioBuffer->PCMBuffer;
+                    audioBuffer->restSize = outlen;
+                }
+            }
+            len1 = (len > audioBuffer->restSize ? audioBuffer->restSize : len);
+            SDL_MixAudio(stream + index, audioBuffer->pos, len1, SDL_MIX_MAXVOLUME);
+            index += len1;
+            audioBuffer->pos += len1;
+            audioBuffer->restSize -= len1;
+            len -= len1;
+        }
+}
+
+bool MediaDisplay_SDL::initAudioSetting(int freq, uint8_t wantedChannels, uint64_t wantedChannelLayout)
+{
+    SDL_AudioSpec wantedSpec;
+    const char *env;
+    static const int nextChannels[] = { 0, 0, 1, 6, 2, 6, 4, 6 };
+    static const int nextSampleRates[] = { 0, 44100, 48000, 96000, 192000 };
+    int nextSampleRateIdx = FF_ARRAY_ELEMS(nextSampleRates) - 1;
+    
+    env = SDL_getenv("SDL_AUDIO_CHANNELS");
+    if (env)
+    {
+            wantedChannels = atoi(env);
+            wantedChannelLayout = av_get_default_channel_layout(wantedChannels);
+    }
+    if (!wantedChannelLayout || wantedChannels != av_get_channel_layout_nb_channels(wantedChannelLayout))
+    {
+        wantedChannelLayout = av_get_default_channel_layout(wantedChannels);
+        wantedChannelLayout &= ~AV_CH_LAYOUT_STEREO_DOWNMIX;
+    }
+    wantedChannels = av_get_channel_layout_nb_channels(wantedChannelLayout);
+    wantedSpec.channels = wantedChannels;
+    wantedSpec.freq = freq;
+    if (wantedSpec.freq <= 0 || wantedSpec.channels <= 0)
+    {
+        msgOutput(MsgType::MSG_ERROR, "Invalid sample rate or channel count!");
+        return false;
+    }
+    while (nextSampleRateIdx && nextSampleRates[nextSampleRateIdx] >= wantedSpec.freq)
+        nextSampleRateIdx--;
+    wantedSpec.format = AUDIO_S16SYS;
+    wantedSpec.silence = 0;
+    wantedSpec.samples = FFMAX(SDLAudioMinBufferSize, 2 << av_log2(wantedSpec.freq / SDLAduioMaxCallBackPerSec));
+    wantedSpec.callback = fillAudioBuffer;
+    wantedSpec.userdata = this;
+    
+    while (SDL_OpenAudio(&wantedSpec, &m_audioSpec) < 0)
+    {
+        msgOutput(MsgType::MSG_WARNING, "SDL_OpenAudio (%d channels, %d Hz): %s",
+            wantedSpec.channels, wantedSpec.freq, SDL_GetError());
+        wantedSpec.channels = nextChannels[FFMIN(7, wantedSpec.channels)];
+        if (!wantedSpec.channels)
+        {
+            wantedSpec.freq = nextSampleRates[nextSampleRateIdx--];
+            wantedSpec.channels = wantedChannels;
+            if (!wantedSpec.freq)
+            {
+                msgOutput(MsgType::MSG_ERROR, "No more combinations to try, audio open failed.");
+                return false;
+            }
+        }
+        wantedChannelLayout = av_get_default_channel_layout(wantedSpec.channels);
+    }
+    if (m_audioSpec.format != AUDIO_S16SYS)
+    {
+        msgOutput(MsgType::MSG_ERROR, "SDL advised audio format %d is not supported!", m_audioSpec.format);
+        return false;
+    }
+    if (m_audioSpec.channels != wantedSpec.channels)
+    {
+        wantedChannelLayout = av_get_default_channel_layout(m_audioSpec.channels);
+        if (!wantedChannelLayout)
+        {
+            msgOutput(MsgType::MSG_ERROR, "SDL advised channel count %d is not supported!", m_audioSpec.channels);
+            return -1;
+        }
+    }
+    m_audioParams.fmt = AV_SAMPLE_FMT_S16;
+    m_audioParams.freq = m_audioSpec.freq;
+    m_audioParams.channelLayout = wantedChannelLayout;
+    m_audioParams.channels = m_audioSpec.channels;
+    m_audioParams.frameSize = av_samples_get_buffer_size(NULL, m_audioParams.channels, 1, m_audioParams.fmt, 1);
+    m_audioParams.bytesPerSec = av_samples_get_buffer_size(NULL, m_audioParams.channels, m_audioParams.freq, m_audioParams.fmt, 1);
+    if (m_audioParams.bytesPerSec <= 0 || m_audioParams.frameSize <= 0)
+    {
+        msgOutput(MsgType::MSG_ERROR, "av_samples_get_buffer_size failed.");
+        return false;
+    }
+
+    m_audioBuffer.PCMBufferSize = av_samples_get_buffer_size(NULL, m_audioSpec.channels, m_audioSpec.samples, AV_SAMPLE_FMT_S16, 1);
+    m_audioBuffer.PCMBuffer = (uint8_t *)av_malloc(m_audioBuffer.PCMBufferSize);
+
+    m_playState.audioDisplay = true;
+    return true;
+}
 
 static int event_thread(void* obaque)
 {
@@ -236,17 +226,15 @@ static int event_thread(void* obaque)
 
 void MediaDisplay_SDL::exec()
 {
-    AVFrame* videoFrameRaw = nullptr;
     if (m_playState.videoDisplay)
     {
-        m_SDLEventThread = SDL_CreateThread(event_thread, NULL, &m_playState);
-        videoFrameRaw = av_frame_alloc();
         if (m_fps > 0)
             m_playState.delay = 1000 / m_fps;
+        m_SDLEventThread = SDL_CreateThread(event_thread, NULL, &m_playState);
     }
 
-    //if (m_playState.audioDisplay)
-    //    SDL_PauseAudio(0);
+    if (m_playState.audioDisplay)
+        SDL_PauseAudio(0);
 
     while (!m_quit)
     {
@@ -262,7 +250,6 @@ void MediaDisplay_SDL::exec()
 
             //initialize buffer and change space when window rect is changing
             int w, h;
-            int64_t pts = 0;
             SDL_GetWindowSize(m_window.get(), &w, &h);
             if (m_videoBuffer.data[0] == nullptr || w != m_windowRect.w || h != m_windowRect.h)
             {
@@ -270,13 +257,13 @@ void MediaDisplay_SDL::exec()
                     free(m_videoBuffer.data[0]);
                 m_videoBuffer.size = av_image_get_buffer_size(AV_PIX_FMT_YUV420P, w, h, 1);
                 unsigned char* outBuffer = (unsigned char*)av_malloc(m_videoBuffer.size);
-                av_image_fill_arrays(m_videoBuffer.data, m_videoBuffer.lineSize, outBuffer, AV_PIX_FMT_YUV420P, m_windowRect.w, m_windowRect.h, 1);
+                av_image_fill_arrays(m_videoBuffer.data, m_videoBuffer.lineSize, outBuffer, AV_PIX_FMT_YUV420P, w, h, 1);
                 m_windowRect.w = w;
                 m_windowRect.h = h;
             }
-            if (m_mainCtrl->getGraphicData(GraphicDataType::YUV420, m_windowRect.w, m_windowRect.h, m_videoBuffer.data, m_videoBuffer.size, m_videoBuffer.lineSize, &pts))
+            if (m_mainCtrl->getGraphicData(GraphicDataType::YUV420, m_windowRect.w, m_windowRect.h, m_videoBuffer.data, m_videoBuffer.size, m_videoBuffer.lineSize, &m_playState.currentVideoTime))
             {
-                //getDelay();
+                getDelay();
                 draw(m_videoBuffer.data[0], m_videoBuffer.lineSize[0]);
             }
             else
@@ -284,21 +271,6 @@ void MediaDisplay_SDL::exec()
                 msgOutput(MsgType::MSG_WARNING, "convert data to YUV420 format failed.");
                 continue;
             }
-
-            //m_videoFrameQueue->deQueue(videoFrameRaw);
-
-            int curPts = av_frame_get_best_effort_timestamp(videoFrameRaw);
-            if (curPts != AV_NOPTS_VALUE)
-            {
-                m_playState.currentVideoTime = curPts * MediaDisplay::r2d(m_videoTimeBsse) * 1000;
-                m_playState.videoPreFrameDelay = (curPts - m_playState.videoPrePts) * MediaDisplay::r2d(m_videoTimeBsse) * 1000;
-                m_playState.videoPrePts = curPts;
-            }
-
-
-            //AVFrame *frameYUV = m_mainControl->convertFrametoYUV420(videoFrameRaw, m_windowRect.w, m_windowRect.h);
-            //av_frame_unref(videoFrameRaw);
-            //if (frameYUV != nullptr && frameYUV->linesize[0] != 0)
         }
         else if (m_playState.SDLEvent.type == SDL_QUIT)
         {
@@ -309,35 +281,36 @@ void MediaDisplay_SDL::exec()
             break;
         }
     }
-    av_frame_free(&videoFrameRaw);
 }
 
-//void MediaDisplay::getDelay()
-//{
-//    double 		retDelay = 0.0;
-//    double 		compare = 0.0;
-//    double  	threshold = 0.0;
-//
-//    if (m_playState.currentVideoTime == 0 && m_playState.currentAudioTime == 0)
-//    {
-//        m_playState.delay = m_fps;
-//        return;
-//    }
-//
-//    compare = m_playState.currentVideoTime - m_playState.currentAudioTime;
-//    threshold = m_playState.videoPreFrameDelay;
-//    if (compare <= -threshold)
-//        retDelay = threshold / 2;
-//    else if (compare >= threshold)
-//        retDelay = threshold * 2;
-//    else
-//        retDelay = threshold;
-//
-//    m_playState.delay = retDelay;
-//
-//    av_log(nullptr, AV_LOG_INFO, "currentVideoTime:%lf,currentAudioTime:%lf,compare:%lf,preFrameDelay:%lf\n",
-//        m_playState.currentVideoTime, m_playState.currentAudioTime, compare, retDelay);
-//}
+void MediaDisplay_SDL::getDelay()
+{
+    msgOutput(MsgType::MSG_INFO, "current audio pts:%d ms", m_playState.currentAudioTime);
+    msgOutput(MsgType::MSG_INFO, "current video pts:%d ms", m_playState.currentVideoTime);
+    //double 		retDelay = 0.0;
+    //double 		compare = 0.0;
+    //double  	threshold = 0.0;
+
+    //if (m_playState.currentVideoTime == 0 && m_playState.currentAudioTime == 0)
+    //{
+    //    m_playState.delay = m_fps;
+    //    return;
+    //}
+
+    //compare = m_playState.currentVideoTime - m_playState.currentAudioTime;
+    //threshold = m_playState.videoPreFrameDelay;
+    //if (compare <= -threshold)
+    //    retDelay = threshold / 2;
+    //else if (compare >= threshold)
+    //    retDelay = threshold * 2;
+    //else
+    //    retDelay = threshold;
+
+    //m_playState.delay = retDelay;
+
+    //av_log(nullptr, AV_LOG_INFO, "currentVideoTime:%lf,currentAudioTime:%lf,compare:%lf,preFrameDelay:%lf\n",
+    //    m_playState.currentVideoTime, m_playState.currentAudioTime, compare, retDelay);
+}
 
 void MediaDisplay_SDL::draw(const uint8_t *data, const int lineSize)
 {

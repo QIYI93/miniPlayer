@@ -26,15 +26,6 @@ typedef struct Timebase {
     int den;
 } Timebase;
 
-//typedef struct AudioParams {
-//    int freq;
-//    int channels;
-//    int64_t channelLayout;
-//    enum AVSampleFormat fmt;
-//    int frameSize;
-//    int bytesPerSec;
-//} AudioParams;
-
 class MediaDisplay
 {
 public:
@@ -43,11 +34,11 @@ public:
 
     virtual bool init() = 0;
     virtual bool initVideoSetting(int width, int height, const char *title) = 0;
-    //virtual bool initAudioSetting(int freq, uint8_t wantedChannels, uint64_t wantedChannelLayout, uint64_t sample) = 0;
+    virtual bool initAudioSetting(int freq, uint8_t wantedChannels, uint64_t wantedChannelLayout) = 0;
 
     virtual void exec() = 0;
 
-    void setVideoTimeBase(int num, int den) { m_videoTimeBsse.num = num; m_videoTimeBsse.den = den; }
+    void setVideoTimeBase(int num, int den) { m_videoTimeBase.num = num; m_videoTimeBase.den = den; }
     void setAudioTimeBase(int num, int den) { m_audioTimeBase.num = num; m_audioTimeBase.den = den; }
     void setFps(int fps) { m_fps = fps; }
     static double r2d(Timebase r) { return r.num == 0 || r.den == 0 ? 0 : (double)r.num / (double)r.den; }
@@ -56,11 +47,11 @@ public:
 
 protected:
     MediaDisplay(MediaMainControl*);
-    void msgOutput(MsgType type, const char*);
+    void msgOutput(MsgType type, const char*,...);
 
 protected:
     AudioParams m_audioParams;
-    Timebase m_videoTimeBsse = { 0,0 };
+    Timebase m_videoTimeBase = { 0,0 };
     Timebase m_audioTimeBase = { 0,0 };
     DisplayType m_displayType;
     MediaMainControl* m_mainCtrl = nullptr;

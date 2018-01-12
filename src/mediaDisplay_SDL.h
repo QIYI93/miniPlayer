@@ -14,12 +14,10 @@ typedef struct PlayState
 {
     bool pause = false;
     bool exit = false;
-    int32_t delay = 100;
-    double audioFrameDuration = 0.0;
-    double currentAudioTime = 0.0;
-    double currentVideoTime = 0.0;
-    int videoPrePts = 0;
-    double videoPreFrameDelay = 0.0;
+    int64_t delay;
+    int64_t currentAudioTime = 0;
+    int64_t currentVideoTime = 0;
+
     bool audioDisplay = false;
     bool videoDisplay = false;             //used
     SDL_Event SDLEvent;
@@ -32,13 +30,13 @@ typedef struct videoBuffer
     uint32_t size;
 }videoBuffer;
 
-//typedef struct AudioBuffer
-//{
-//    uint8_t *PCMBuffer = nullptr;
-//    int PCMBufferSize = 0;
-//    uint8_t *pos = 0;
-//    int restSize = 0;
-//}AudioBuffer;
+typedef struct AudioBuffer
+{
+    uint8_t *PCMBuffer = nullptr;
+    int PCMBufferSize = 0;
+    uint8_t *pos = 0;
+    int restSize = 0;
+}AudioBuffer;
 
 class MediaDisplay_SDL : public MediaDisplay
 {
@@ -47,7 +45,7 @@ public:
 
     virtual bool init() override;
     virtual bool initVideoSetting(int width, int height, const char *title) override;
-    //virtual bool initAudioSetting(int freq, uint8_t wantedChannels, uint64_t wantedChannelLayout, uint64_t sample) override;
+    virtual bool initAudioSetting(int freq, uint8_t wantedChannels, uint64_t wantedChannelLayout) override;
 
     virtual void exec() override;
 
@@ -55,14 +53,9 @@ private:
     MediaDisplay_SDL(MediaDisplay_SDL&) = delete;
     ~MediaDisplay_SDL();
 
-
-    //static void fillAudioBuffer(void *udata, Uint8 *stream, int len);
+    static void fillAudioBuffer(void *udata, Uint8 *stream, int len);
     void draw(const uint8_t *data, const int lineSize);
-    //void getDelay();
-
-
-
-    //static void msgOutput(const char*);
+    void getDelay();
 
 private:
     std::unique_ptr<SDL_Window, void(*)(SDL_Window*)> m_window;
@@ -74,7 +67,7 @@ private:
     PlayState m_playState;
 
     videoBuffer m_videoBuffer;
-    //AudioBuffer m_audioBuffer;
+    AudioBuffer m_audioBuffer;
 
     SDL_AudioSpec m_audioSpec;
 

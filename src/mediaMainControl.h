@@ -37,13 +37,9 @@ public:
     void stop();
 
     int64_t getDurationTime() { return m_totalTimeMS; }
-    int getVideoStreamIndex() { return m_videoStreamIndex; }
-    int getAudioStreamIndex() { return m_audioStreamIndex; }
-    AVFrame* convertFrametoYUV420(AVFrame* src, const int width, const int height); //Do not manage returned buffer.
-    int convertFrametoPCM(AVFrame* src, uint8_t *des, int inLen);
 
     bool getGraphicData(GraphicDataType type, int width, int height, void *data, const uint32_t size, int *lineSize, int64_t *pts);
-    bool getPCMData(void *data, const uint32_t size, int64_t *pts, const AudioParams para);
+    bool getPCMData(void *data, const uint32_t size, const AudioParams para, int64_t *pts, int64_t *outLen);
 
     bool isAudioFrameEmpty() { return m_audioFrameQueue->m_noMorePktToDecode && m_audioFrameQueue->m_queue.empty(); }
     bool isVideoFrameEmpty() { return m_videoFrameQueue->m_noMorePktToDecode && m_videoFrameQueue->m_queue.empty(); }
@@ -58,6 +54,11 @@ private:
     static void initDecodePktThread(void *mainCtrl);
     void cleanPktQueue();
     void cleanFrameQueue();
+
+    int getVideoStreamIndex() { return m_videoStreamIndex; }
+    int getAudioStreamIndex() { return m_audioStreamIndex; }
+    int64_t getVideoFramPts(AVFrame *pframe);
+    int64_t getAudioFramPts(AVFrame *pframe);
 
 private:
     AVFormatContext *m_formatCtx = nullptr;
@@ -83,7 +84,9 @@ private:
     int m_frameHeight = 0;
     int m_fps = 0;
     int64_t m_totalTimeMS = -1;
-    AudioParams m_audioParams;
+    //int64_t m_preAudioPts = 0;
+    int64_t m_videoClock = 0;
+    int64_t m_audioClock = 0;
     std::mutex m_mutex;
 
     bool m_noPktToSperate = false;

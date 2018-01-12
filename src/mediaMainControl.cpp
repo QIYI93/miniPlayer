@@ -247,78 +247,6 @@ void MediaMainControl::initDecodePktThread(void *mainCtrl)
     std::thread(decodeAudioPktFun, mainCtrl).detach();
 }
 
-AVFrame* MediaMainControl::convertFrametoYUV420(AVFrame *src, const int width, const int height)
-{
-    static int h = 0;
-    static int w = 0;
-    static AVFrame *dst = nullptr;
-    if (w != width && h != height)
-    {
-        w = width;
-        h = height;
-        if (dst)
-            av_frame_free(&dst);
-    }
-    if (dst == nullptr)
-    {
-        dst = av_frame_alloc();
-        unsigned char* outBuffer = (unsigned char*)av_malloc(av_image_get_buffer_size(AV_PIX_FMT_YUV420P, width, height, 1));
-        av_image_fill_arrays(dst->data, dst->linesize, outBuffer, AV_PIX_FMT_YUV420P, width, height, 1);
-    }
-    m_swsCtx = sws_getCachedContext(m_swsCtx,
-        m_videoCodecCtx->width, m_videoCodecCtx->height,
-        m_videoCodecCtx->pix_fmt,
-        width, height,
-        AV_PIX_FMT_YUV420P,
-        SWS_BICUBIC,
-        nullptr, nullptr, nullptr);
-    if (!m_swsCtx)
-    {
-        msgOutput("sws_getCachedContext failed.");
-        return dst;
-    }
-    int ret = sws_scale(m_swsCtx, (const uint8_t* const*)src->data, src->linesize, 0, m_videoCodecCtx->height, dst->data, dst->linesize);
-    if (ret > 0)
-    {
-        return dst;
-    }
-    else
-    {
-        av_frame_free(&dst);
-        return dst;
-    }
-}
-
-int MediaMainControl::convertFrametoPCM(AVFrame* src, uint8_t *des, int inLen)
-{
-    if (!des || !inLen)
-        return false;
-    if(m_swrCtx == nullptr)
-        m_swrCtx = swr_alloc();
-
-    swr_alloc_set_opts(m_swrCtx, 
-        m_audioParams.channelLayout, 
-        m_audioParams.fmt, 
-        m_audioParams.freq,
-        m_audioCodecCtx->channel_layout,
-        m_audioCodecCtx->sample_fmt, 
-        m_audioCodecCtx->sample_rate,
-        NULL, NULL);
-
-    if (!m_swrCtx || swr_init(m_swrCtx) < 0)
-    {
-        av_log(NULL, AV_LOG_ERROR,
-            "Cannot create sample rate converter for conversion of %d Hz %s %d channels to %d Hz %s %d channels!\n",
-            m_audioCodecCtx->sample_rate, av_get_sample_fmt_name(m_audioCodecCtx->sample_fmt), m_audioCodecCtx->channels,
-            m_audioParams.freq, av_get_sample_fmt_name(m_audioParams.fmt), m_audioParams.channels);
-        swr_free(&m_swrCtx);
-        return false;
-    }
-
-    int ret = swr_convert(m_swrCtx, &des, inLen, (const uint8_t **)src->data, src->nb_samples);
-    return ret * m_audioParams.frameSize;
-}
-
 bool MediaMainControl::getGraphicData(GraphicDataType type, int width, int height, void *data, const uint32_t size, int *lineSize, int64_t *pts)
 {
     switch (type)
@@ -342,12 +270,12 @@ bool MediaMainControl::getGraphicData(GraphicDataType type, int width, int heigh
         return false;
     }
     AVFrame* videoFrameRaw = nullptr;
-    uint8_t *rawData[AV_NUM_DATA_POINTERS] = { 0 };
-    rawData[0] = reinterpret_cast<uint8_t *>(data);
     videoFrameRaw = av_frame_alloc();
     m_videoFrameQueue->deQueue(videoFrameRaw);
-    int ret = sws_scale(m_swsCtx, (const uint8_t* const*)videoFrameRaw->data, videoFrameRaw->linesize, 0, m_videoCodecCtx->height, rawData, lineSize);
+    int ret = sws_scale(m_swsCtx, (const uint8_t* const*)videoFrameRaw->data, videoFrameRaw->linesize, 0, m_videoCodecCtx->height, (uint8_t *const*)data, lineSize);
+    *pts = getVideoFramPts(videoFrameRaw);
     av_frame_unref(videoFrameRaw);
+    av_frame_free(&videoFrameRaw);
 
     if (ret > 0)
         return true;
@@ -355,9 +283,88 @@ bool MediaMainControl::getGraphicData(GraphicDataType type, int width, int heigh
         return false;
 }
 
-bool MediaMainControl::getPCMData(void *data, const uint32_t size, int64_t *pts, const AudioParams para)
+int64_t MediaMainControl::getVideoFramPts(AVFrame *pframe)
 {
-    return true; 
+    int64_t pts = 0.0;
+    double frame_delay = 0.0;
+
+    pts = av_frame_get_best_effort_timestamp(pframe);
+    if (pts == AV_NOPTS_VALUE)
+        pts = 0;
+
+    pts = pts * av_q2d(m_formatCtx->streams[m_videoStreamIndex]->time_base) * 1000;
+    if (pts != 0)
+        m_videoClock = pts;
+    else
+        pts = m_videoClock;
+
+    frame_delay = av_q2d(m_formatCtx->streams[m_videoStreamIndex]->time_base);
+    frame_delay += pframe->repeat_pict / (frame_delay * 2);
+    m_videoClock += frame_delay * 1000;
+
+    return pts;
+}
+
+int64_t MediaMainControl::getAudioFramPts(AVFrame *pframe)
+{
+    int64_t pts = 0.0;
+    double frame_delay = 0.0;
+
+    pts = av_frame_get_best_effort_timestamp(pframe);
+    if (pts == AV_NOPTS_VALUE)
+        pts = 0;
+    pts = pts * av_q2d(m_formatCtx->streams[m_audioStreamIndex]->time_base) * 1000;
+    if (pts != 0)
+        m_audioClock = pts;
+    else
+        pts = m_audioClock;
+
+    frame_delay = (double)pframe->nb_samples / (double)m_audioCodecCtx->sample_rate;
+    m_audioClock += frame_delay * 1000;
+    return pts;
+
+}
+
+bool MediaMainControl::getPCMData(void *data, const uint32_t inLen, const AudioParams para, int64_t *pts, int64_t *outLen)
+{
+    if (!data || !inLen)
+        return false;
+    if (m_swrCtx == nullptr)
+        m_swrCtx = swr_alloc();
+
+    swr_alloc_set_opts(m_swrCtx,
+        para.channelLayout,
+        para.fmt,
+        para.freq,
+        m_audioCodecCtx->channel_layout,
+        m_audioCodecCtx->sample_fmt,
+        m_audioCodecCtx->sample_rate,
+        NULL, NULL);
+
+    if (!m_swrCtx || swr_init(m_swrCtx) < 0)
+    {
+        av_log(NULL, AV_LOG_ERROR,
+            "Cannot create sample rate converter for conversion of %d Hz %s %d channels to %d Hz %s %d channels!\n",
+            m_audioCodecCtx->sample_rate, av_get_sample_fmt_name(m_audioCodecCtx->sample_fmt), m_audioCodecCtx->channels,
+            para.freq, av_get_sample_fmt_name(para.fmt), para.channels);
+        swr_free(&m_swrCtx);
+        return false;
+    }
+
+    AVFrame* audioFrameRaw = nullptr;
+    audioFrameRaw = av_frame_alloc();
+    m_audioFrameQueue->deQueue(audioFrameRaw);
+    int ret = swr_convert(m_swrCtx, (uint8_t**)&data, inLen, (const uint8_t **)audioFrameRaw->data, audioFrameRaw->nb_samples);
+    *pts = getAudioFramPts(audioFrameRaw);
+    av_frame_unref(audioFrameRaw);
+    av_frame_free(&audioFrameRaw);
+
+    *outLen =  ret * para.frameSize;
+
+    if (ret < 0)
+        return false;
+    else
+        return true;
 }
 
 
@@ -421,11 +428,11 @@ void MediaMainControl::play()
         mediaDisplay->setVideoTimeBase(m_formatCtx->streams[m_videoStreamIndex]->time_base.num, m_formatCtx->streams[m_videoStreamIndex]->time_base.den);
         mediaDisplay->setFps(m_fps);
     }
-    //if (m_audioStreamIndex >= 0)
-    //{
-    //    mediaDisplay->initAudioSetting(m_audioCodecCtx->sample_rate, m_audioCodecCtx->channels, m_audioCodecCtx->channel_layout, NULL);
-    //    mediaDisplay->setAudioTimeBase(m_formatCtx->streams[m_audioStreamIndex]->time_base.num, m_formatCtx->streams[m_audioStreamIndex]->time_base.den);
-    //}
+    if (m_audioStreamIndex >= 0)
+    {
+        mediaDisplay->initAudioSetting(m_audioCodecCtx->sample_rate, m_audioCodecCtx->channels, m_audioCodecCtx->channel_layout);
+        mediaDisplay->setAudioTimeBase(m_formatCtx->streams[m_audioStreamIndex]->time_base.num, m_formatCtx->streams[m_audioStreamIndex]->time_base.den);
+    }
     mediaDisplay->exec();
     MediaDisplay::destroyDisplayInstance(mediaDisplay);
 }
