@@ -43,7 +43,7 @@ bool MediaDisplay_SDL::init()
 {
     if (SDL_Init(SDL_INIT_TIMER | SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_EVENTS) == -1)
     {
-        msgOutput(MsgType::MSG_ERROR, "SDL Init Failed.");
+        msgOutput(MsgType::MSG_ERROR, "SDL Init Failed.\n");
         return false;
     }
     return true;
@@ -60,21 +60,21 @@ bool MediaDisplay_SDL::initVideoSetting(int width, int height, const char *title
     m_window.reset(SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, m_windowRect.w, m_windowRect.h, SDL_WINDOW_SHOWN));
     if (m_window == nullptr)
     {
-        msgOutput(MsgType::MSG_ERROR, "Failed to create window.");
+        msgOutput(MsgType::MSG_ERROR, "Failed to create window.\n");
         return false;
     }
 
     m_renderer.reset(SDL_CreateRenderer(m_window.get(), -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC));
     if (m_renderer == nullptr)
     {
-        msgOutput(MsgType::MSG_ERROR, "Failed to create renderer.");
+        msgOutput(MsgType::MSG_ERROR, "Failed to create renderer.\n");
         return false;
     }
 
     m_texture.reset(SDL_CreateTexture(m_renderer.get(), SDL_PIXELFORMAT_IYUV, SDL_TEXTUREACCESS_STREAMING, m_windowRect.w, m_windowRect.h));
     if (m_renderer == nullptr)
     {
-        msgOutput(MsgType::MSG_ERROR, "Failed to create texture.");
+        msgOutput(MsgType::MSG_ERROR, "Failed to create texture.\n");
         return false;
     }
     
@@ -100,7 +100,7 @@ void MediaDisplay_SDL::fillAudioBuffer(void *udata, Uint8 *stream, int len)
             {
                 if(mediaDisplay->m_mainCtrl->isAudioFrameEmpty())
                     return;
-                int64_t outlen = 0;
+                int32_t outlen = 0;
                 if (mediaDisplay->m_mainCtrl->getPCMData(audioBuffer->PCMBuffer, audioBuffer->PCMBufferSize, mediaDisplay->m_audioParams, &mediaDisplay->m_playState.currentAudioTime, &outlen))
                 {
                     audioBuffer->pos = audioBuffer->PCMBuffer;
@@ -116,7 +116,7 @@ void MediaDisplay_SDL::fillAudioBuffer(void *udata, Uint8 *stream, int len)
         }
 }
 
-bool MediaDisplay_SDL::initAudioSetting(int freq, uint8_t wantedChannels, uint64_t wantedChannelLayout)
+bool MediaDisplay_SDL::initAudioSetting(int freq, uint8_t wantedChannels, uint32_t wantedChannelLayout)
 {
     SDL_AudioSpec wantedSpec;
     const char *env;
@@ -140,7 +140,7 @@ bool MediaDisplay_SDL::initAudioSetting(int freq, uint8_t wantedChannels, uint64
     wantedSpec.freq = freq;
     if (wantedSpec.freq <= 0 || wantedSpec.channels <= 0)
     {
-        msgOutput(MsgType::MSG_ERROR, "Invalid sample rate or channel count!");
+        msgOutput(MsgType::MSG_ERROR, "Invalid sample rate or channel count!\n");
         return false;
     }
     while (nextSampleRateIdx && nextSampleRates[nextSampleRateIdx] >= wantedSpec.freq)
@@ -153,7 +153,7 @@ bool MediaDisplay_SDL::initAudioSetting(int freq, uint8_t wantedChannels, uint64
     
     while (SDL_OpenAudio(&wantedSpec, &m_audioSpec) < 0)
     {
-        msgOutput(MsgType::MSG_WARNING, "SDL_OpenAudio (%d channels, %d Hz): %s",
+        msgOutput(MsgType::MSG_WARNING, "SDL_OpenAudio (%d channels, %d Hz): %s\n",
             wantedSpec.channels, wantedSpec.freq, SDL_GetError());
         wantedSpec.channels = nextChannels[FFMIN(7, wantedSpec.channels)];
         if (!wantedSpec.channels)
@@ -162,7 +162,7 @@ bool MediaDisplay_SDL::initAudioSetting(int freq, uint8_t wantedChannels, uint64
             wantedSpec.channels = wantedChannels;
             if (!wantedSpec.freq)
             {
-                msgOutput(MsgType::MSG_ERROR, "No more combinations to try, audio open failed.");
+                msgOutput(MsgType::MSG_ERROR, "No more combinations to try, audio open failed.\n");
                 return false;
             }
         }
@@ -170,7 +170,7 @@ bool MediaDisplay_SDL::initAudioSetting(int freq, uint8_t wantedChannels, uint64
     }
     if (m_audioSpec.format != AUDIO_S16SYS)
     {
-        msgOutput(MsgType::MSG_ERROR, "SDL advised audio format %d is not supported!", m_audioSpec.format);
+        msgOutput(MsgType::MSG_ERROR, "SDL advised audio format %d is not supported!\n", m_audioSpec.format);
         return false;
     }
     if (m_audioSpec.channels != wantedSpec.channels)
@@ -178,7 +178,7 @@ bool MediaDisplay_SDL::initAudioSetting(int freq, uint8_t wantedChannels, uint64
         wantedChannelLayout = av_get_default_channel_layout(m_audioSpec.channels);
         if (!wantedChannelLayout)
         {
-            msgOutput(MsgType::MSG_ERROR, "SDL advised channel count %d is not supported!", m_audioSpec.channels);
+            msgOutput(MsgType::MSG_ERROR, "SDL advised channel count %d is not supported!\n", m_audioSpec.channels);
             return -1;
         }
     }
@@ -190,11 +190,12 @@ bool MediaDisplay_SDL::initAudioSetting(int freq, uint8_t wantedChannels, uint64
     m_audioParams.bytesPerSec = av_samples_get_buffer_size(NULL, m_audioParams.channels, m_audioParams.freq, m_audioParams.fmt, 1);
     if (m_audioParams.bytesPerSec <= 0 || m_audioParams.frameSize <= 0)
     {
-        msgOutput(MsgType::MSG_ERROR, "av_samples_get_buffer_size failed.");
+        msgOutput(MsgType::MSG_ERROR, "av_samples_get_buffer_size failed.\n");
         return false;
     }
 
     m_audioBuffer.PCMBufferSize = av_samples_get_buffer_size(NULL, m_audioSpec.channels, m_audioSpec.samples, AV_SAMPLE_FMT_S16, 1);
+    m_audioBuffer.bytesPerSec = av_samples_get_buffer_size(NULL, m_audioSpec.channels, m_audioSpec.freq, AV_SAMPLE_FMT_S16, 1);
     m_audioBuffer.PCMBuffer = (uint8_t *)av_malloc(m_audioBuffer.PCMBufferSize);
 
     m_playState.audioDisplay = true;
@@ -268,7 +269,7 @@ void MediaDisplay_SDL::exec()
             }
             else
             {
-                msgOutput(MsgType::MSG_WARNING, "convert data to YUV420 format failed.");
+                msgOutput(MsgType::MSG_WARNING, "convert data to YUV420 format failed.\n");
                 continue;
             }
         }
@@ -285,31 +286,36 @@ void MediaDisplay_SDL::exec()
 
 void MediaDisplay_SDL::getDelay()
 {
-    msgOutput(MsgType::MSG_INFO, "current audio pts:%d ms", m_playState.currentAudioTime);
-    msgOutput(MsgType::MSG_INFO, "current video pts:%d ms", m_playState.currentVideoTime);
-    //double 		retDelay = 0.0;
-    //double 		compare = 0.0;
-    //double  	threshold = 0.0;
+    int32_t currentAudioTimeAfterModified = m_playState.currentAudioTime - ((m_audioBuffer.restSize / m_audioBuffer.bytesPerSec) / 1000);
 
-    //if (m_playState.currentVideoTime == 0 && m_playState.currentAudioTime == 0)
-    //{
-    //    m_playState.delay = m_fps;
-    //    return;
-    //}
+    static int32_t threshold = (1 / (float)m_fps) * 1000;
 
-    //compare = m_playState.currentVideoTime - m_playState.currentAudioTime;
-    //threshold = m_playState.videoPreFrameDelay;
-    //if (compare <= -threshold)
-    //    retDelay = threshold / 2;
-    //else if (compare >= threshold)
-    //    retDelay = threshold * 2;
-    //else
-    //    retDelay = threshold;
+    int32_t 		retDelay = 0.0;
+    int32_t 		compare = 0.0;
 
-    //m_playState.delay = retDelay;
 
-    //av_log(nullptr, AV_LOG_INFO, "currentVideoTime:%lf,currentAudioTime:%lf,compare:%lf,preFrameDelay:%lf\n",
-    //    m_playState.currentVideoTime, m_playState.currentAudioTime, compare, retDelay);
+    if (m_playState.currentVideoTime == 0 && currentAudioTimeAfterModified == 0)
+    {
+        m_playState.delay = m_fps;
+        return;
+    }
+
+    compare = m_playState.currentVideoTime - currentAudioTimeAfterModified;
+    if (compare <= -threshold)
+        retDelay = threshold / 2;
+    else if (compare >= threshold)
+        retDelay = threshold * 2;
+    else
+        retDelay = threshold;
+
+    m_playState.delay = retDelay;
+
+    if(retDelay == threshold)
+        av_log(nullptr, AV_LOG_INFO, "video_pts:%d,audio_pts:%d,compare:%d,OK\n", m_playState.currentVideoTime, currentAudioTimeAfterModified, compare);
+    else if(retDelay < threshold)
+        av_log(nullptr, AV_LOG_INFO, "video_pts:%d,audio_pts:%d,compare:%d,video delay---------\n", m_playState.currentVideoTime, currentAudioTimeAfterModified, compare);
+    else
+        av_log(nullptr, AV_LOG_INFO, "video_pts:%d,audio_pts:%d,compare:%d,video fast----------\n", m_playState.currentVideoTime, currentAudioTimeAfterModified, compare);
 }
 
 void MediaDisplay_SDL::draw(const uint8_t *data, const int lineSize)

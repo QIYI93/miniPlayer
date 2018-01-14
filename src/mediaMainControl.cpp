@@ -247,7 +247,7 @@ void MediaMainControl::initDecodePktThread(void *mainCtrl)
     std::thread(decodeAudioPktFun, mainCtrl).detach();
 }
 
-bool MediaMainControl::getGraphicData(GraphicDataType type, int width, int height, void *data, const uint32_t size, int *lineSize, int64_t *pts)
+bool MediaMainControl::getGraphicData(GraphicDataType type, int width, int height, void *data, const uint32_t size, int *lineSize, int32_t *pts)
 {
     switch (type)
     {
@@ -283,9 +283,9 @@ bool MediaMainControl::getGraphicData(GraphicDataType type, int width, int heigh
         return false;
 }
 
-int64_t MediaMainControl::getVideoFramPts(AVFrame *pframe)
+int32_t MediaMainControl::getVideoFramPts(AVFrame *pframe)
 {
-    int64_t pts = 0.0;
+    int32_t pts = 0.0;
     double frame_delay = 0.0;
 
     pts = av_frame_get_best_effort_timestamp(pframe);
@@ -305,9 +305,9 @@ int64_t MediaMainControl::getVideoFramPts(AVFrame *pframe)
     return pts;
 }
 
-int64_t MediaMainControl::getAudioFramPts(AVFrame *pframe)
+int32_t MediaMainControl::getAudioFramPts(AVFrame *pframe)
 {
-    int64_t pts = 0.0;
+    int32_t pts = 0.0;
     double frame_delay = 0.0;
 
     pts = av_frame_get_best_effort_timestamp(pframe);
@@ -325,7 +325,7 @@ int64_t MediaMainControl::getAudioFramPts(AVFrame *pframe)
 
 }
 
-bool MediaMainControl::getPCMData(void *data, const uint32_t inLen, const AudioParams para, int64_t *pts, int64_t *outLen)
+bool MediaMainControl::getPCMData(void *data, const uint32_t inLen, const AudioParams para, int32_t *pts, int32_t *outLen)
 {
     if (!data || !inLen)
         return false;
@@ -401,8 +401,8 @@ void MediaMainControl::initPktQueue()
     cleanPktQueue();
     m_videoPktQueue = new PacketQueue();
     m_audioPktQueue = new PacketQueue();
-    m_videoPktQueue->m_maxElements = 50;
-    m_audioPktQueue->m_maxElements = 50;
+    m_videoPktQueue->m_maxElements = 30;
+    m_audioPktQueue->m_maxElements = 30;
 }
 
 void MediaMainControl::initFrameQueue()
@@ -410,8 +410,8 @@ void MediaMainControl::initFrameQueue()
     cleanFrameQueue();
     m_videoFrameQueue = new FrameQueue();
     m_audioFrameQueue = new FrameQueue();
-    m_videoFrameQueue->m_maxElements = 50;
-    m_audioFrameQueue->m_maxElements = 50;
+    m_videoFrameQueue->m_maxElements = 30;
+    m_audioFrameQueue->m_maxElements = 30;
 }
 
 void MediaMainControl::play()

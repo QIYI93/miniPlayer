@@ -34,7 +34,7 @@ public:
 
     virtual bool init() = 0;
     virtual bool initVideoSetting(int width, int height, const char *title) = 0;
-    virtual bool initAudioSetting(int freq, uint8_t wantedChannels, uint64_t wantedChannelLayout) = 0;
+    virtual bool initAudioSetting(int freq, uint8_t wantedChannels, uint32_t wantedChannelLayout) = 0;
 
     virtual void exec() = 0;
 

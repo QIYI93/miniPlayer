@@ -90,5 +90,5 @@ void MediaDisplay::msgOutput(MsgType type, const char* msg, ...)
     vsnprintf(out, sizeof(out), msg, args);
     va_end(args);
 
-    std::cout << str1 << str2  << out << std::endl;
+    std::cout << str1 << str2  << out;
 }

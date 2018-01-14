@@ -9,7 +9,7 @@
 typedef struct AudioParams {
     int freq;
     int channels;
-    int64_t channelLayout;
+    int32_t channelLayout;
     enum AVSampleFormat fmt;
     int frameSize;
     int bytesPerSec;
@@ -36,10 +36,10 @@ public:
     void play();
     void stop();
 
-    int64_t getDurationTime() { return m_totalTimeMS; }
+    int32_t getDurationTime() { return m_totalTimeMS; }
 
-    bool getGraphicData(GraphicDataType type, int width, int height, void *data, const uint32_t size, int *lineSize, int64_t *pts);
-    bool getPCMData(void *data, const uint32_t size, const AudioParams para, int64_t *pts, int64_t *outLen);
+    bool getGraphicData(GraphicDataType type, int width, int height, void *data, const uint32_t size, int *lineSize, int32_t *pts);
+    bool getPCMData(void *data, const uint32_t size, const AudioParams para, int32_t *pts, int32_t *outLen);
 
     bool isAudioFrameEmpty() { return m_audioFrameQueue->m_noMorePktToDecode && m_audioFrameQueue->m_queue.empty(); }
     bool isVideoFrameEmpty() { return m_videoFrameQueue->m_noMorePktToDecode && m_videoFrameQueue->m_queue.empty(); }
@@ -57,8 +57,8 @@ private:
 
     int getVideoStreamIndex() { return m_videoStreamIndex; }
     int getAudioStreamIndex() { return m_audioStreamIndex; }
-    int64_t getVideoFramPts(AVFrame *pframe);
-    int64_t getAudioFramPts(AVFrame *pframe);
+    int32_t getVideoFramPts(AVFrame *pframe);
+    int32_t getAudioFramPts(AVFrame *pframe);
 
 private:
     AVFormatContext *m_formatCtx = nullptr;
@@ -83,10 +83,9 @@ private:
     int m_frameWidth = 0;
     int m_frameHeight = 0;
     int m_fps = 0;
-    int64_t m_totalTimeMS = -1;
-    //int64_t m_preAudioPts = 0;
-    int64_t m_videoClock = 0;
-    int64_t m_audioClock = 0;
+    int32_t m_totalTimeMS = -1;
+    int32_t m_videoClock = 0;
+    int32_t m_audioClock = 0;
     std::mutex m_mutex;
 
     bool m_noPktToSperate = false;

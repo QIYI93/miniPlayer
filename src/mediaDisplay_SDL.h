@@ -14,9 +14,9 @@ typedef struct PlayState
 {
     bool pause = false;
     bool exit = false;
-    int64_t delay;
-    int64_t currentAudioTime = 0;
-    int64_t currentVideoTime = 0;
+    int32_t delay;
+    int32_t currentAudioTime = 0;
+    int32_t currentVideoTime = 0;
 
     bool audioDisplay = false;
     bool videoDisplay = false;             //used
@@ -33,9 +33,10 @@ typedef struct videoBuffer
 typedef struct AudioBuffer
 {
     uint8_t *PCMBuffer = nullptr;
-    int PCMBufferSize = 0;
     uint8_t *pos = 0;
+    int PCMBufferSize = 0;
     int restSize = 0;
+    int bytesPerSec = 0;
 }AudioBuffer;
 
 class MediaDisplay_SDL : public MediaDisplay
@@ -45,7 +46,7 @@ public:
 
     virtual bool init() override;
     virtual bool initVideoSetting(int width, int height, const char *title) override;
-    virtual bool initAudioSetting(int freq, uint8_t wantedChannels, uint64_t wantedChannelLayout) override;
+    virtual bool initAudioSetting(int freq, uint8_t wantedChannels, uint32_t wantedChannelLayout) override;
 
     virtual void exec() override;
 
