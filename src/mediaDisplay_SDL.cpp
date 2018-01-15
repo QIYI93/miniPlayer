@@ -311,11 +311,11 @@ void MediaDisplay_SDL::getDelay()
     m_playState.delay = retDelay;
 
     if(retDelay == threshold)
-        av_log(nullptr, AV_LOG_INFO, "video_pts:%d,audio_pts:%d,compare:%d,OK\n", m_playState.currentVideoTime, currentAudioTimeAfterModified, compare);
+        av_log(nullptr, AV_LOG_INFO, "video_time:%d,audio_time:%d,compare:%d,OK\n", m_playState.currentVideoTime, currentAudioTimeAfterModified, compare);
     else if(retDelay < threshold)
-        av_log(nullptr, AV_LOG_INFO, "video_pts:%d,audio_pts:%d,compare:%d,video delay---------\n", m_playState.currentVideoTime, currentAudioTimeAfterModified, compare);
+        av_log(nullptr, AV_LOG_INFO, "video_time:%d,audio_time:%d,compare:%d,video delay---------\n", m_playState.currentVideoTime, currentAudioTimeAfterModified, compare);
     else
-        av_log(nullptr, AV_LOG_INFO, "video_pts:%d,audio_pts:%d,compare:%d,video fast----------\n", m_playState.currentVideoTime, currentAudioTimeAfterModified, compare);
+        av_log(nullptr, AV_LOG_INFO, "video_time:%d,audio_time:%d,compare:%d,video fast----------\n", m_playState.currentVideoTime, currentAudioTimeAfterModified, compare);
 }
 
 void MediaDisplay_SDL::draw(const uint8_t *data, const int lineSize)

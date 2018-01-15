@@ -5,7 +5,7 @@
 #include <string>
 
 #include "mediaDisplay_SDL.h"
-//#include "mediaDisplay_DirectX.h"
+#include "mediaDisplay_DirectX.h"
 //#include "mediaDisplay_OpenGL.h"
 
 

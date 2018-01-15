@@ -1,10 +1,7 @@
 #ifndef MEDIADISPLAY_H
 #define MEDIADISPLAY_H
 
-#include <memory>
 #include <mutex>
-
-
 #include "mediaMainControl.h"
 
 enum class DisplayType :int

@@ -1,5 +1,3 @@
-#include <iostream>
-
 #include "mediaMainControl.h"
 
 
@@ -13,8 +11,8 @@ extern "C"
 
 int main(int argc, char * argv[])
 {
-    //auto const file = "D:\\project\\ffmpeg\\media_data\\video\\sintel.wmv";
-    auto const file = "C:\\Project\\ffmpeg\\ffmpeg_study\\resource\\video\\Forrest_Gump_IMAX.mp4";
+    auto const file = "D:\\project\\ffmpeg\\media_data\\video\\sintel.wmv";
+    //auto const file = "C:\\Project\\ffmpeg\\ffmpeg_study\\resource\\video\\Forrest_Gump_IMAX.mp4";
     //auto const file = "D:\\project\\ffmpeg\\media_data\\video\\Warcraft3_End.avi";
     //auto const file = "D:\\project\\ffmpeg\\media_data\\audio\\陈一发儿 - 童话镇.mp3";
 
