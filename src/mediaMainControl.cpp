@@ -111,8 +111,23 @@ bool MediaMainControl::openFile(const char *file)
 
 void MediaMainControl::closeFile()
 {
-    cleanFrameQueue();
+    m_isQuit = true;
+    if (m_videoFrameQueue && m_audioFrameQueue)
+    {
+        m_videoFrameQueue->clean();
+        m_audioFrameQueue->clean();
+        m_decodeAudioThread.join();
+        m_decodeVideoThread.join();
+    }
+    if (m_videoPktQueue && m_audioPktQueue)
+    {
+        m_videoPktQueue->clean();
+        m_audioPktQueue->clean();
+        m_separatePktThread.join();
+    }
+
     cleanPktQueue();
+    cleanFrameQueue();
 
     avcodec_close(m_videoCodecCtx);
     avcodec_close(m_audioCodecCtx);
@@ -140,6 +155,7 @@ void MediaMainControl::initSeparatePktThread(void *mainCtrl)
         while (true)
         {
             if (!mainCtl->m_formatCtx) return;
+            if (mainCtl->m_isQuit) return;
             int ret = av_read_frame(mainCtl->m_formatCtx, pAVPacket);
             if (ret != NULL)
             {
@@ -170,7 +186,8 @@ void MediaMainControl::initSeparatePktThread(void *mainCtrl)
         av_packet_free(&pAVPacket);
     };
 
-    std::thread(separatePktFun, mainCtrl).detach();
+    MediaMainControl *mainCtl = static_cast<MediaMainControl*>(mainCtrl);
+    mainCtl->m_separatePktThread = std::thread(separatePktFun, mainCtrl);
 }
 
 void MediaMainControl::initDecodePktThread(void *mainCtrl)
@@ -184,6 +201,7 @@ void MediaMainControl::initDecodePktThread(void *mainCtrl)
         while (true)
         {
             if (!mainCtl->m_formatCtx) return;
+            if (mainCtl->m_isQuit) return;
             //decode video pkt
             mainCtl->m_videoPktQueue->deQueue(videoPacket);
             if (avcodec_send_packet(mainCtl->m_videoCodecCtx, videoPacket) == NULL)
@@ -218,6 +236,7 @@ void MediaMainControl::initDecodePktThread(void *mainCtrl)
         while (true)
         {
             if (!mainCtl->m_formatCtx) return;
+            if (mainCtl->m_isQuit) return;
             //decode audio pkt
             mainCtl->m_audioPktQueue->deQueue(audioPacket);
             if (avcodec_send_packet(mainCtl->m_audioCodecCtx, audioPacket) == NULL)
@@ -243,8 +262,9 @@ void MediaMainControl::initDecodePktThread(void *mainCtrl)
         av_frame_free(&frame);
     };
 
-    std::thread(decodeVideoPktFun, mainCtrl).detach();
-    std::thread(decodeAudioPktFun, mainCtrl).detach();
+    MediaMainControl *mainCtl = static_cast<MediaMainControl*>(mainCtrl);
+    mainCtl->m_decodeAudioThread = std::thread(decodeAudioPktFun, mainCtrl);
+    mainCtl->m_decodeVideoThread = std::thread(decodeVideoPktFun, mainCtrl);
 }
 
 bool MediaMainControl::getGraphicData(GraphicDataType type, int width, int height, void *data, const uint32_t size, int *lineSize, int32_t *pts)
@@ -416,12 +436,18 @@ void MediaMainControl::initFrameQueue()
 
 void MediaMainControl::play()
 {
+    m_isQuit = false;
     initPktQueue();
     initFrameQueue();
     initSeparatePktThread(this);
     initDecodePktThread(this);
 
-    MediaDisplay *mediaDisplay = MediaDisplay::createDisplayInstance(this, DisplayType::USING_SDL);
+    MediaDisplay *mediaDisplay = MediaDisplay::createDisplayInstance(this, DisplayType::USING_DIRECTX);
+    if (mediaDisplay == nullptr)
+    {
+        av_log(NULL, AV_LOG_ERROR, "Cannot create display instance!\n");
+        return;
+    }
     if (m_videoStreamIndex >= 0)
     {
         mediaDisplay->initVideoSetting(m_frameWidth, m_frameHeight, m_file.c_str());

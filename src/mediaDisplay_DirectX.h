@@ -3,37 +3,11 @@
 
 #include <memory>
 #include <mutex>
+#include "DirectX_SDK/d3d9.h"
+
+#pragma comment (lib,"d3d9.lib")
 
 #include "mediaDisplay.h"
-
-//typedef struct PlayState
-//{
-//    bool pause = false;
-//    bool exit = false;
-//    int32_t delay;
-//    int32_t currentAudioTime = 0;
-//    int32_t currentVideoTime = 0;
-//
-//    bool audioDisplay = false;
-//    bool videoDisplay = false;             //used
-//    SDL_Event SDLEvent;
-//}PlayState;
-//
-//typedef struct videoBuffer
-//{
-//    uint8_t *data[AV_NUM_DATA_POINTERS] = { 0 };
-//    int  lineSize[AV_NUM_DATA_POINTERS] = { 0 };
-//    uint32_t size;
-//}videoBuffer;
-//
-//typedef struct AudioBuffer
-//{
-//    uint8_t *PCMBuffer = nullptr;
-//    uint8_t *pos = 0;
-//    int PCMBufferSize = 0;
-//    int restSize = 0;
-//    int bytesPerSec = 0;
-//}AudioBuffer;
 
 class MediaDisplay_Directx : public MediaDisplay
 {
@@ -51,6 +25,7 @@ private:
     ~MediaDisplay_Directx();
 
 private:
+    HWND m_mainWnd = NULL;
 
     //PlayState m_playState;
     //videoBuffer m_videoBuffer;

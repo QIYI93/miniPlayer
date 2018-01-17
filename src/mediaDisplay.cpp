@@ -30,7 +30,7 @@ MediaDisplay* MediaDisplay::createDisplayInstance(MediaMainControl* mainCtrl, Di
         mediaDisplay = new MediaDisplay_SDL(mainCtrl);
         break;
     case DisplayType::USING_DIRECTX:
-        //mediaDisplay = new mediaDisplay_DirectX();
+        mediaDisplay = new MediaDisplay_Directx(mainCtrl);
         break;
     case DisplayType::USING_OPENGL:
         //mediaDisplay = new mediaDisplay_OpenGL();
@@ -38,8 +38,11 @@ MediaDisplay* MediaDisplay::createDisplayInstance(MediaMainControl* mainCtrl, Di
     default:
         break;
     }
-
-    return mediaDisplay;
+    if(mediaDisplay->init())
+        return mediaDisplay;
+    
+    delete mediaDisplay;
+    return nullptr;
 }
 
 void MediaDisplay::destroyDisplayInstance(MediaDisplay *instance)

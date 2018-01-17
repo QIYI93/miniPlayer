@@ -27,6 +27,7 @@ struct PacketQueue
 
     bool enQueue(const AVPacket *packet);
     bool deQueue(AVPacket *packet, bool block = true);
+    void clean();
 };
 
 
@@ -45,6 +46,7 @@ struct FrameQueue
 
     bool enQueue(const AVFrame *frame);
     bool deQueue(AVFrame *frame, bool block = true);
+    void clean();
 };
 
 

@@ -39,6 +39,17 @@ bool PacketQueue::deQueue(AVPacket *packet, bool block)
     return ret;
 }
 
+void PacketQueue::clean()
+{
+    AVPacket *pkt = av_packet_alloc();
+    while (!m_queue.empty())
+    {
+        if(deQueue(pkt))
+            av_packet_unref(pkt);
+    }
+    av_packet_free(&pkt);
+}
+
 PacketQueue::~PacketQueue()
 {
     while (!m_queue.empty())
@@ -83,6 +94,17 @@ bool FrameQueue::deQueue(AVFrame *frame, bool block)
     m_condEnQueue.notify_all();
 
     return ret;
+}
+
+void FrameQueue::clean()
+{
+    AVFrame *frame = av_frame_alloc();
+    while (!m_queue.empty())
+    {
+        if (deQueue(frame))
+            av_frame_unref(frame);
+    }
+    av_frame_free(&frame);
 }
 
 FrameQueue::~FrameQueue()
