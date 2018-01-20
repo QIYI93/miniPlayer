@@ -16,6 +16,8 @@ namespace
 {
     auto const errMsgBufferSize = 2048;
     auto const maxAudioFrameSize = 192000;
+    auto const maxPktQueueSize = 30;
+    auto const maxFrameQueueSize = 30;
     std::mutex s_mutex;
 }
 
@@ -421,8 +423,8 @@ void MediaMainControl::initPktQueue()
     cleanPktQueue();
     m_videoPktQueue = new PacketQueue();
     m_audioPktQueue = new PacketQueue();
-    m_videoPktQueue->m_maxElements = 30;
-    m_audioPktQueue->m_maxElements = 30;
+    m_videoPktQueue->m_maxElements = maxPktQueueSize;
+    m_audioPktQueue->m_maxElements = maxPktQueueSize;
 }
 
 void MediaMainControl::initFrameQueue()
@@ -430,8 +432,8 @@ void MediaMainControl::initFrameQueue()
     cleanFrameQueue();
     m_videoFrameQueue = new FrameQueue();
     m_audioFrameQueue = new FrameQueue();
-    m_videoFrameQueue->m_maxElements = 30;
-    m_audioFrameQueue->m_maxElements = 30;
+    m_videoFrameQueue->m_maxElements = maxFrameQueueSize;
+    m_audioFrameQueue->m_maxElements = maxFrameQueueSize;
 }
 
 void MediaMainControl::play()

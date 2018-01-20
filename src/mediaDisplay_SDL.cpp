@@ -1,6 +1,7 @@
 #include "mediaDisplay_SDL.h"
 
 #include <iostream>
+#include "util.h"
 
 extern "C"
 {
@@ -57,7 +58,12 @@ bool MediaDisplay_SDL::initVideoSetting(int width, int height, const char *title
     m_windowRect.w = width;
     m_windowRect.h = height;
 
-    m_window.reset(SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, m_windowRect.w, m_windowRect.h, SDL_WINDOW_SHOWN));
+    wchar_t wTitle[1024];
+    char utf8Title[1024];
+    NarrowToWideBuf(title, wTitle);
+    WideToUTF8Buf(wTitle, utf8Title);
+
+    m_window.reset(SDL_CreateWindow(utf8Title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, m_windowRect.w, m_windowRect.h, SDL_WINDOW_SHOWN));
     if (m_window == nullptr)
     {
         msgOutput(MsgType::MSG_ERROR, "Failed to create window.\n");
