@@ -10,19 +10,6 @@ extern "C"
 }
 #include "mediaDisplay.h"
 
-typedef struct PlayState
-{
-    bool pause = false;
-    bool exit = false;
-    int32_t delay;
-    int32_t currentAudioTime = 0;
-    int32_t currentVideoTime = 0;
-
-    bool audioDisplay = false;
-    bool videoDisplay = false;             //used
-    SDL_Event SDLEvent;
-}PlayState;
-
 typedef struct videoBuffer
 {
     uint8_t *data[AV_NUM_DATA_POINTERS] = { 0 };
@@ -65,7 +52,7 @@ private:
 
     SDL_Rect m_windowRect;
     SDL_Thread* m_SDLEventThread = nullptr;
-    PlayState m_playState;
+    SDL_Event m_SDLEvent;
 
     videoBuffer m_videoBuffer;
     AudioBuffer m_audioBuffer;

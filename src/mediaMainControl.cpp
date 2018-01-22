@@ -282,6 +282,15 @@ bool MediaMainControl::getGraphicData(GraphicDataType type, int width, int heigh
             SWS_BICUBIC,
             nullptr, nullptr, nullptr);
         break;
+    case GraphicDataType::BGRA:
+        m_swsCtx = sws_getCachedContext(m_swsCtx,
+            m_videoCodecCtx->width, m_videoCodecCtx->height,
+            m_videoCodecCtx->pix_fmt,
+            width, height,
+            AV_PIX_FMT_BGRA,
+            SWS_BICUBIC,
+            nullptr, nullptr, nullptr);
+        break;
     default:
         break;
     }

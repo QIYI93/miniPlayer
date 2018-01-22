@@ -10,8 +10,10 @@ extern "C"
 #include <libswresample/swresample.h>
 }
 
-static LRESULT WINAPI winProc(HWND hwnd, UINT msg, WPARAM wparma, LPARAM lparam);
+#define RENDER_NEXT_FRAME (WM_USER + 0x100)
+#define CLOSE_WINDOW (WM_USER + 0x101)
 
+static LRESULT WINAPI winProc(HWND hwnd, UINT msg, WPARAM wparma, LPARAM lparam);
 
 MediaDisplay_Directx::MediaDisplay_Directx(MediaMainControl *mainCtrl)
     :MediaDisplay(mainCtrl)
@@ -48,6 +50,9 @@ bool MediaDisplay_Directx::init()
 
 bool MediaDisplay_Directx::initD3D(int width, int height)
 {
+    m_frameWidth = width;
+    m_frameHeight = height;
+
     HRESULT lRet;
     m_direct3D9.reset(Direct3DCreate9(D3D_SDK_VERSION));
     if (m_direct3D9 == nullptr)
@@ -170,6 +175,26 @@ bool MediaDisplay_Directx::initD3D(int width, int height)
     }
     m_direct3DVertexBuffer.reset(direct3DVertexBuffer);
 
+    CUSTOMVERTEX vertices[] = {
+        { 0.0f,		0.0f,		0.0f,	1.0f,   D3DCOLOR_ARGB(255, 255, 255, 255),0.0f,0.0f },
+        { width,	0.0f,		0.0f,	1.0f,   D3DCOLOR_ARGB(255, 255, 255, 255),1.0f,0.0f },
+        { width,	height, 	0.0f,	1.0f,   D3DCOLOR_ARGB(255, 255, 255, 255),1.0f,1.0f },
+        { 0.0f,		height, 	0.0f,	1.0f,   D3DCOLOR_ARGB(255, 255, 255, 255),0.0f,1.0f }
+    };
+
+    CUSTOMVERTEX *pVertex;
+    lRet = m_direct3DVertexBuffer->Lock(0, 4 * sizeof(CUSTOMVERTEX), (void**)&pVertex, 0);
+    if (FAILED(lRet))
+    {
+        msgOutput(MsgType::MSG_ERROR, "Failed to Lock vertex buffer.\n");
+        return false;
+    }
+
+    memcpy(pVertex, vertices, sizeof(vertices));
+    m_direct3DVertexBuffer->Unlock();
+
+    m_playState.videoDisplay = true;
+    return true;
 }
 
 bool MediaDisplay_Directx::initVideoSetting(int width, int height, const char *title)
@@ -200,6 +225,12 @@ bool MediaDisplay_Directx::initAudioSetting(int freq, uint8_t wantedChannels, ui
 
 void MediaDisplay_Directx::exec()
 {
+    if (m_playState.videoDisplay && m_fps > 0)
+    {
+        m_playState.delay = 1000 / m_fps;
+        m_renderControlThread = std::thread(renderControlThread, this);
+    }
+
     MSG msg;
     while (GetMessage(&msg, nullptr, 0, 0))
     {
@@ -213,10 +244,77 @@ void MediaDisplay_Directx::exec()
 
 LRESULT WINAPI winProc(HWND hwnd, UINT msg, WPARAM wparma, LPARAM lparam)
 {
-    switch (msg) {
+    switch (msg)
+    {
     case WM_DESTROY:
         PostQuitMessage(0);
         return 0;
+    case RENDER_NEXT_FRAME:
+        MediaDisplay_Directx::renderNextFrame(wparma);
     }
     return DefWindowProc(hwnd, msg, wparma, lparam);
+}
+
+void MediaDisplay_Directx::renderControlThread(MediaDisplay_Directx* p)
+{
+    while (!p->m_playState.exit && !p->m_mainCtrl->isVideoFrameEmpty())
+    {
+        SendMessage(p->m_mainWnd, RENDER_NEXT_FRAME, WPARAM(p), NULL);
+        std::chrono::milliseconds dura(p->m_playState.delay);
+        std::this_thread::sleep_for(dura);
+    }
+}
+
+
+void MediaDisplay_Directx::renderNextFrame(WPARAM wp)
+{
+    MediaDisplay_Directx *p = reinterpret_cast<MediaDisplay_Directx*>(wp);
+    LRESULT lRet;
+
+    if (p->m_videoBuffer.data[0] == nullptr)
+    {
+        if (p->m_videoBuffer.data[0] != nullptr)
+            free(p->m_videoBuffer.data[0]);
+        p->m_videoBuffer.size = av_image_get_buffer_size(AV_PIX_FMT_BGRA, p->m_frameWidth, p->m_frameHeight, 1);
+        unsigned char* outBuffer = (unsigned char*)av_malloc(p->m_videoBuffer.size);
+        av_image_fill_arrays(p->m_videoBuffer.data, p->m_videoBuffer.lineSize, outBuffer, AV_PIX_FMT_BGRA, p->m_frameWidth, p->m_frameHeight, 1);
+    }
+    if (!p->m_mainCtrl->getGraphicData(GraphicDataType::BGRA, p->m_frameWidth, p->m_frameHeight, p->m_videoBuffer.data, p->m_videoBuffer.size, p->m_videoBuffer.lineSize, &p->m_playState.currentVideoTime))
+    {
+        p->msgOutput(MsgType::MSG_ERROR, "get rgba data failed\n");
+        return;
+    }
+    //lRet = p->m_direct3DDevice->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_XRGB(0, 0, 0), 1.0f, 0);
+    D3DLOCKED_RECT d3dRect;
+    lRet = p->m_direct3DTexture->LockRect(0, &d3dRect, 0, 0);
+    if (FAILED(lRet))
+    {
+        p->msgOutput(MsgType::MSG_ERROR, "Failed to Lock Rect\n");
+        return;
+    }
+    // copy rgb data to texture
+    byte *pSrc = p->m_videoBuffer.data[0];
+    byte *pDest = (byte *)d3dRect.pBits;
+    int stride = d3dRect.Pitch;
+
+    for (unsigned long i = 0; i < p->m_frameHeight; i++)
+    {
+        memcpy(pDest, pSrc, p->m_videoBuffer.lineSize[0]);
+        pDest += stride;
+        pSrc += p->m_videoBuffer.lineSize[0];
+    }
+    p->m_direct3DTexture->UnlockRect(0);
+
+    lRet = p->m_direct3DDevice->BeginScene();
+    if (FAILED(lRet))
+    {
+        p->msgOutput(MsgType::MSG_ERROR, "Failed to begin scene\n");
+        return;
+    }
+    p->m_direct3DDevice->SetTexture(0, p->m_direct3DTexture.get());
+    p->m_direct3DDevice->SetStreamSource(0, p->m_direct3DVertexBuffer.get(), 0, sizeof(CUSTOMVERTEX));
+    p->m_direct3DDevice->SetFVF(D3DFVF_XYZRHW | D3DFVF_DIFFUSE | D3DFVF_TEX1);
+    p->m_direct3DDevice->DrawPrimitive(D3DPT_TRIANGLEFAN, 0, 2);
+    p->m_direct3DDevice->EndScene();
+    p->m_direct3DDevice->Present(NULL, NULL, NULL, NULL);
 }

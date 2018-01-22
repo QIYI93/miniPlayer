@@ -245,12 +245,12 @@ void MediaDisplay_SDL::exec()
 
     while (!m_quit)
     {
-        SDL_WaitEvent(&m_playState.SDLEvent);
+        SDL_WaitEvent(&m_SDLEvent);
         if (m_mainCtrl->isAudioFrameEmpty() && m_mainCtrl->isVideoFrameEmpty())
         {
             m_playState.exit = 1;
         }
-        if (m_playState.SDLEvent.type == REFRESH_VIDEO_EVENT)
+        if (m_SDLEvent.type == REFRESH_VIDEO_EVENT)
         {
             if (m_mainCtrl->isVideoFrameEmpty())
                 continue;
@@ -279,11 +279,11 @@ void MediaDisplay_SDL::exec()
                 continue;
             }
         }
-        else if (m_playState.SDLEvent.type == SDL_QUIT)
+        else if (m_SDLEvent.type == SDL_QUIT)
         {
             m_playState.exit = 1;
         }
-        else if (m_playState.SDLEvent.type == BREAK_EVENT)
+        else if (m_SDLEvent.type == BREAK_EVENT)
         {
             break;
         }

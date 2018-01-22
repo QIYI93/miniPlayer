@@ -19,6 +19,7 @@ typedef struct AudioParams {
 enum class GraphicDataType :int
 {
     YUV420 = 0,
+    BGRA,
 };
 
 class AVCodec;

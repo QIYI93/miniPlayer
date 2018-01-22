@@ -23,6 +23,18 @@ typedef struct Timebase {
     int den;
 } Timebase;
 
+typedef struct PlayState
+{
+    bool pause = false;
+    bool exit = false;
+    int32_t delay;
+    int32_t currentAudioTime = 0;
+    int32_t currentVideoTime = 0;
+
+    bool audioDisplay = false;
+    bool videoDisplay = false;
+}PlayState;
+
 class MediaDisplay
 {
 public:
@@ -52,6 +64,7 @@ protected:
     Timebase m_audioTimeBase = { 0,0 };
     DisplayType m_displayType;
     MediaMainControl* m_mainCtrl = nullptr;
+    PlayState m_playState;
     float m_fps = 0;
 
     std::mutex m_mutex_msg;
