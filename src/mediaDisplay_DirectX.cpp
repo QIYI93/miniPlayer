@@ -12,6 +12,14 @@ extern "C"
 
 #define RENDER_NEXT_FRAME (WM_USER + 0x100)
 #define CLOSE_WINDOW (WM_USER + 0x101)
+#define LOAD_FRAME (WM_USER + 0x102)
+#define AUDIO_QUEUE_SIZE 4
+
+namespace
+{
+    auto const audioMinBufferSize = 512;
+    auto const audioMaxCallBackPerSec = 30;
+}
 
 static LRESULT WINAPI winProc(HWND hwnd, UINT msg, WPARAM wparma, LPARAM lparam);
 
@@ -219,6 +227,45 @@ bool MediaDisplay_Directx::initVideoSetting(int width, int height, const char *t
 
 bool MediaDisplay_Directx::initAudioSetting(int freq, uint8_t wantedChannels, uint32_t wantedChannelLayout)
 {
+    if (!m_audioPlay.isValid())
+    {
+        msgOutput(MsgType::MSG_ERROR, "Failed to create XAudioPlay class.\n");
+        return false;
+    }
+
+    int channels_;
+
+    if (!wantedChannelLayout || wantedChannels != av_get_channel_layout_nb_channels(wantedChannelLayout))
+    {
+        wantedChannelLayout = av_get_default_channel_layout(wantedChannels);
+        wantedChannelLayout &= ~AV_CH_LAYOUT_STEREO_DOWNMIX;
+    }
+    wantedChannels = av_get_channel_layout_nb_channels(wantedChannelLayout);
+    channels_ = wantedChannels;
+
+    if (freq <= 0 || channels_ <= 0)
+    {
+        msgOutput(MsgType::MSG_ERROR, "Invalid sample rate or channel count!\n");
+        return false;
+    }
+    m_audioParams.fmt = AV_SAMPLE_FMT_S16;
+    m_audioParams.freq = freq;
+    m_audioParams.channels = channels_;
+    m_audioParams.channelLayout = wantedChannelLayout;
+    m_audioParams.frameSize = av_samples_get_buffer_size(NULL, m_audioParams.channels, 1, m_audioParams.fmt, 1);
+    m_audioParams.bytesPerSec = av_samples_get_buffer_size(NULL, m_audioParams.channels, m_audioParams.freq, m_audioParams.fmt, 1);
+
+    m_audioBufferSamples = FFMAX(audioMinBufferSize, 2 << av_log2(freq / audioMaxCallBackPerSec));
+
+    //create pcm data array
+    m_audioBuffer.PCMBufferSize = av_samples_get_buffer_size(NULL, m_audioParams.channels, m_audioBufferSamples, AV_SAMPLE_FMT_S16, 1);
+    m_audioBuffer.PCMBuffer = (uint8_t *)av_malloc(m_audioBuffer.PCMBufferSize);
+
+    m_audioPlay.setBufferSize(AUDIO_QUEUE_SIZE, m_audioBuffer.PCMBufferSize);
+    if (!m_audioPlay.setFormat(m_audioParams.frameSize, m_audioParams.channels, m_audioParams.freq))
+        return false;
+
+    m_playState.audioDisplay = true;
     return true;
 }
 
@@ -229,6 +276,11 @@ void MediaDisplay_Directx::exec()
     {
         m_playState.delay = 1000 / m_fps;
         m_renderControlThread = std::thread(renderControlThread, this);
+    }
+    if (m_playState.audioDisplay)
+    {
+        m_audioPlay.startPlaying();
+        m_loadAudioControlThread = std::thread(loadAudioDataThread, this);
     }
 
     MSG msg;
@@ -265,6 +317,14 @@ void MediaDisplay_Directx::renderControlThread(MediaDisplay_Directx* p)
     }
 }
 
+void MediaDisplay_Directx::loadAudioDataThread(MediaDisplay_Directx* p)
+{
+    while (!p->m_playState.exit && !p->m_mainCtrl->isAudioFrameEmpty())
+    {
+        while()
+        //p->m_audioPlay.readData(buffer, length);
+    }
+}
 
 void MediaDisplay_Directx::renderNextFrame(WPARAM wp)
 {

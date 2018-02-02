@@ -4,7 +4,9 @@
 #include <memory>
 #include <mutex>
 #include "windows.h"
+#include "DirectX_SDK/XAudio2.h"
 #include "DirectX_SDK/d3d9.h"
+#include "XAudioPlay.h"
 
 #pragma comment (lib,"d3d9.lib")
 
@@ -25,6 +27,15 @@ typedef struct videoBufferForDirectX
     uint32_t size;
 }videoBufferForDirectX;
 
+typedef struct AudioBufferForXAudio
+{
+    uint8_t *PCMBuffer = nullptr;
+    uint8_t *pos = 0;
+    int PCMBufferSize = 0;
+    int restSize = 0;
+    int bytesPerSec = 0;
+}AudioBufferForXAudio;
+
 class MediaDisplay_Directx : public MediaDisplay
 {
 public:
@@ -42,6 +53,7 @@ private:
     ~MediaDisplay_Directx();
     bool initD3D(int, int);
     static void renderControlThread(MediaDisplay_Directx*);
+    static void loadAudioDataThread(MediaDisplay_Directx*);
 
 
 private:
@@ -57,9 +69,12 @@ private:
     std::unique_ptr<IDirect3DVertexBuffer9, void(*)(IDirect3DVertexBuffer9*)> m_direct3DVertexBuffer;
 
     std::thread m_renderControlThread;
+    std::thread m_loadAudioControlThread;
 
     videoBufferForDirectX m_videoBuffer;
-    //AudioBuffer m_audioBuffer;
+    XAudioPlay m_audioPlay;
+    int m_audioBufferSamples = 0;
+    AudioBufferForXAudio m_audioBuffer;
     //bool m_quit = false;
 
     int m_frameWidth = 0;

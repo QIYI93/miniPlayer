@@ -75,6 +75,8 @@ link_directories("${CMAKE_CURRENT_LIST_DIR}/player_deps/ffmpeg_deps/${LINK_SUFFI
 #SDL2
 include_directories(SYSTEM "${CMAKE_CURRENT_LIST_DIR}/player_deps/sdl_deps/include")
 link_directories("${CMAKE_CURRENT_LIST_DIR}/player_deps/sdl_deps/${LINK_SUFFIX}/lib")
+#DirectX
+include_directories(SYSTEM "${CMAKE_CURRENT_LIST_DIR}/src/DirectX_SDK")
 
 
 
