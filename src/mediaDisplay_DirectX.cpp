@@ -13,7 +13,7 @@ extern "C"
 #define RENDER_NEXT_FRAME (WM_USER + 0x100)
 #define CLOSE_WINDOW (WM_USER + 0x101)
 #define LOAD_FRAME (WM_USER + 0x102)
-#define AUDIO_QUEUE_SIZE 4
+#define AUDIO_QUEUE_SIZE 3
 
 namespace
 {
@@ -257,12 +257,9 @@ bool MediaDisplay_Directx::initAudioSetting(int freq, uint8_t wantedChannels, ui
 
     m_audioBufferSamples = FFMAX(audioMinBufferSize, 2 << av_log2(freq / audioMaxCallBackPerSec));
 
-    //create pcm data array
-    m_audioBuffer.PCMBufferSize = av_samples_get_buffer_size(NULL, m_audioParams.channels, m_audioBufferSamples, AV_SAMPLE_FMT_S16, 1);
-    m_audioBuffer.PCMBuffer = (uint8_t *)av_malloc(m_audioBuffer.PCMBufferSize);
-
-    m_audioPlay.setBufferSize(AUDIO_QUEUE_SIZE, m_audioBuffer.PCMBufferSize);
-    if (!m_audioPlay.setFormat(m_audioParams.frameSize, m_audioParams.channels, m_audioParams.freq))
+    m_audioBufferSizePerDeliver = av_samples_get_buffer_size(NULL, m_audioParams.channels, m_audioBufferSamples, AV_SAMPLE_FMT_S16, 1);
+    m_audioPlay.setBufferSize(AUDIO_QUEUE_SIZE, m_audioBufferSizePerDeliver);
+    if (!m_audioPlay.setFormat(av_samples_get_buffer_size(NULL, 1, 1, m_audioParams.fmt, 1), m_audioParams.channels, m_audioParams.freq))
         return false;
 
     m_playState.audioDisplay = true;
@@ -312,6 +309,7 @@ void MediaDisplay_Directx::renderControlThread(MediaDisplay_Directx* p)
     while (!p->m_playState.exit && !p->m_mainCtrl->isVideoFrameEmpty())
     {
         SendMessage(p->m_mainWnd, RENDER_NEXT_FRAME, WPARAM(p), NULL);
+        p->getDelay();
         std::chrono::milliseconds dura(p->m_playState.delay);
         std::this_thread::sleep_for(dura);
     }
@@ -319,11 +317,34 @@ void MediaDisplay_Directx::renderControlThread(MediaDisplay_Directx* p)
 
 void MediaDisplay_Directx::loadAudioDataThread(MediaDisplay_Directx* p)
 {
+    int PCMBufferSize = p->m_audioBufferSizePerDeliver * 4;
+    uint8_t *PCMBuffer = (uint8_t *)av_malloc(PCMBufferSize);
+    uint8_t *pos = PCMBuffer;
+    
+    int outLen = 0;
+    int restLen = 0;
+
     while (!p->m_playState.exit && !p->m_mainCtrl->isAudioFrameEmpty())
     {
-        while()
-        //p->m_audioPlay.readData(buffer, length);
+        while (pos - PCMBuffer < p->m_audioBufferSizePerDeliver)
+        {
+            if (p->m_mainCtrl->isAudioFrameEmpty())
+            {
+                p->m_audioPlay.readData(PCMBuffer, pos - PCMBuffer);
+                return;
+            }
+            outLen = 0;
+            if (p->m_mainCtrl->getPCMData(pos, PCMBufferSize - (pos - PCMBuffer), p->m_audioParams, &p->m_playState.currentAudioTime, &outLen))
+            {
+                pos += outLen;
+            }
+        }
+        p->m_audioPlay.readData(PCMBuffer, p->m_audioBufferSizePerDeliver);
+        restLen = pos - PCMBuffer - p->m_audioBufferSizePerDeliver;
+        memcpy_s(PCMBuffer, p->m_audioBufferSizePerDeliver, PCMBuffer + p->m_audioBufferSizePerDeliver, restLen);
+        pos = PCMBuffer + restLen;
     }
+    av_free(PCMBuffer);
 }
 
 void MediaDisplay_Directx::renderNextFrame(WPARAM wp)
@@ -377,4 +398,39 @@ void MediaDisplay_Directx::renderNextFrame(WPARAM wp)
     p->m_direct3DDevice->DrawPrimitive(D3DPT_TRIANGLEFAN, 0, 2);
     p->m_direct3DDevice->EndScene();
     p->m_direct3DDevice->Present(NULL, NULL, NULL, NULL);
+}
+
+void MediaDisplay_Directx::getDelay()
+{
+    int currentAudioTime = m_audioPlay.getDuration(); //more precisely
+
+    static int32_t threshold = (1 / (float)m_fps) * 1000;
+
+    int32_t 		retDelay = 0.0;
+    int32_t 		compare = 0.0;
+
+
+    if (m_playState.currentVideoTime == 0 && currentAudioTime == 0)
+    {
+        m_playState.delay = m_fps;
+        return;
+    }
+
+    compare = m_playState.currentVideoTime - currentAudioTime;
+
+    if (compare <= -threshold)
+        retDelay = m_fps / 2;
+    else if (compare >= threshold)
+        retDelay = m_fps * 2;
+    else
+        retDelay = threshold;
+
+    m_playState.delay = retDelay;
+
+    if (retDelay == threshold)
+        av_log(nullptr, AV_LOG_INFO, "video_time:%d,audio_time:%d,compare:%d,OK\n", m_playState.currentVideoTime, currentAudioTime, compare);
+    else if (retDelay < threshold)
+        av_log(nullptr, AV_LOG_INFO, "video_time:%d,audio_time:%d,compare:%d,video delay---------\n", m_playState.currentVideoTime, currentAudioTime, compare);
+    else
+        av_log(nullptr, AV_LOG_INFO, "video_time:%d,audio_time:%d,compare:%d,video fast----------\n", m_playState.currentVideoTime, currentAudioTime, compare);
 }

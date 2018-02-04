@@ -16,8 +16,8 @@ namespace
 {
     auto const errMsgBufferSize = 2048;
     auto const maxAudioFrameSize = 192000;
-    auto const maxPktQueueSize = 30;
-    auto const maxFrameQueueSize = 30;
+    auto const maxPktQueueSize = 40;
+    auto const maxFrameQueueSize = 40;
     std::mutex s_mutex;
 }
 

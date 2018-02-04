@@ -76,7 +76,7 @@ link_directories("${CMAKE_CURRENT_LIST_DIR}/player_deps/ffmpeg_deps/${LINK_SUFFI
 include_directories(SYSTEM "${CMAKE_CURRENT_LIST_DIR}/player_deps/sdl_deps/include")
 link_directories("${CMAKE_CURRENT_LIST_DIR}/player_deps/sdl_deps/${LINK_SUFFIX}/lib")
 #DirectX
-include_directories(SYSTEM "${CMAKE_CURRENT_LIST_DIR}/src/DirectX_SDK")
+#include_directories(SYSTEM "${CMAKE_CURRENT_LIST_DIR}/src/DirectX_SDK")
 
 
 
@@ -98,6 +98,10 @@ avutil.lib
 postproc.lib 
 swresample.lib 
 swscale.lib)
+
+target_link_libraries(miniplayer
+d3d9.lib
+xaudio2.lib)
 endif()
 
 if(MSVC)

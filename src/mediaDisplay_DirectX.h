@@ -3,12 +3,10 @@
 
 #include <memory>
 #include <mutex>
-#include "windows.h"
-#include "DirectX_SDK/XAudio2.h"
-#include "DirectX_SDK/d3d9.h"
+#include <windows.h>
+#include <xaudio2.h>
+#include <d3d9.h>
 #include "XAudioPlay.h"
-
-#pragma comment (lib,"d3d9.lib")
 
 #include "mediaDisplay.h"
 
@@ -27,14 +25,14 @@ typedef struct videoBufferForDirectX
     uint32_t size;
 }videoBufferForDirectX;
 
-typedef struct AudioBufferForXAudio
-{
-    uint8_t *PCMBuffer = nullptr;
-    uint8_t *pos = 0;
-    int PCMBufferSize = 0;
-    int restSize = 0;
-    int bytesPerSec = 0;
-}AudioBufferForXAudio;
+//typedef struct AudioBufferForXAudio
+//{
+//    uint8_t *PCMBuffer = nullptr;
+//    uint8_t *pos = 0;
+//    int PCMBufferSize = 0;
+//    int restSize = 0;
+//    int bytesPerSec = 0;
+//}AudioBufferForXAudio;
 
 class MediaDisplay_Directx : public MediaDisplay
 {
@@ -52,6 +50,7 @@ private:
     MediaDisplay_Directx(MediaDisplay_Directx&) = delete;
     ~MediaDisplay_Directx();
     bool initD3D(int, int);
+    void getDelay();
     static void renderControlThread(MediaDisplay_Directx*);
     static void loadAudioDataThread(MediaDisplay_Directx*);
 
@@ -74,7 +73,7 @@ private:
     videoBufferForDirectX m_videoBuffer;
     XAudioPlay m_audioPlay;
     int m_audioBufferSamples = 0;
-    AudioBufferForXAudio m_audioBuffer;
+    int m_audioBufferSizePerDeliver;
     //bool m_quit = false;
 
     int m_frameWidth = 0;

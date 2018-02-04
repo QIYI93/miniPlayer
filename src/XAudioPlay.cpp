@@ -66,7 +66,6 @@ XAudioPlay::XAudioPlay()
         return;
 
     setBufferSize(DEF_MaxBufferCount, DEF_StreamingBufferSize);
-    m_waveFormat.nChannels = 2; //default
 
     lRet = m_XAudio2->CreateSourceVoice(&m_sourceVoice,
         &m_waveFormat,
@@ -138,6 +137,14 @@ void XAudioPlay::reset()
     m_writingPosition = 0;
     m_voiceCallBack.m_count = 0;
     m_voiceCallBack.m_lastContext = 0;
+
+    m_waveFormat.wFormatTag = WAVE_FORMAT_PCM;
+    m_waveFormat.wBitsPerSample = 16;
+    m_waveFormat.nChannels = 2;
+    m_waveFormat.nSamplesPerSec = 44100;
+    m_waveFormat.nBlockAlign = m_waveFormat.wBitsPerSample / 8 * m_waveFormat.nChannels;
+    m_waveFormat.nAvgBytesPerSec = m_waveFormat.nBlockAlign * m_waveFormat.nSamplesPerSec;
+    m_waveFormat.cbSize = 0;
 }
 
 void XAudioPlay::stopPlaying()
@@ -195,9 +202,9 @@ XAUDIO2_BUFFER XAudioPlay::makeXAudio2Buffer(const BYTE *pBuffer, int BufferSize
     return xAudio2Buffer;
 }
 
-bool XAudioPlay::setFormat(int bitsPerSample, int channels, int freq)
+bool XAudioPlay::setFormat(int bytes, int channels, int freq)
 {
-    if (m_waveFormat.wBitsPerSample == bitsPerSample 
+    if (m_waveFormat.wBitsPerSample == bytes * 8
         && m_waveFormat.nChannels == channels 
         && m_waveFormat.nSamplesPerSec == freq)
         return true;
@@ -210,10 +217,10 @@ bool XAudioPlay::setFormat(int bitsPerSample, int channels, int freq)
     m_sourceVoice = nullptr;
 
     m_waveFormat.wFormatTag = WAVE_FORMAT_PCM;
-    m_waveFormat.wBitsPerSample = bitsPerSample;
+    m_waveFormat.wBitsPerSample = bytes * 8;
     m_waveFormat.nChannels = channels;
     m_waveFormat.nSamplesPerSec = freq;
-    m_waveFormat.nBlockAlign = bitsPerSample / 8 * channels;
+    m_waveFormat.nBlockAlign = bytes * channels;
     m_waveFormat.nAvgBytesPerSec = m_waveFormat.nBlockAlign * freq;
     m_waveFormat.cbSize = 0;
 
@@ -261,4 +268,15 @@ void XAudioPlay::readData(unsigned char *buffer, int length)
         m_writingBufferNumber = (1 + m_writingBufferNumber) % m_maxBufferCount;
         ++m_unReadingBufferCount;
     }
+}
+
+int XAudioPlay::getDuration()
+{
+    static XAUDIO2_VOICE_STATE state;
+    if(m_sourceVoice)
+    { 
+        m_sourceVoice->GetState(&state);
+        return (int)((double)state.SamplesPlayed / (double)m_waveFormat.nSamplesPerSec * 1000);
+    }
+    return 0;
 }

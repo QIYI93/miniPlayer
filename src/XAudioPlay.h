@@ -1,7 +1,8 @@
 #ifndef XAUDIOPLAY_H
 #define XAUDIOPLAY_H
 
-#include "DirectX_SDK/XAudio2.h"
+#include <xaudio2.h>
+
 
 #define DEF_MaxBufferCount 4
 #define DEF_StreamingBufferSize 40960
@@ -43,12 +44,13 @@ public:
     XAudioPlay(XAudioPlay&) = delete;
     ~XAudioPlay();
     bool isValid() { return m_isValid; }
-    bool setFormat(int bits, int channels, int freq);
+    bool setFormat(int bytes, int channels, int freq);
     void setBufferSize(int maxBufferCount, int streamingBufferSize);
     void pause();
     void startPlaying();
     void stopPlaying();
     void readData(unsigned char *buffer, int length); //blocking
+    int  getDuration();
 
 private:
     void reset();
