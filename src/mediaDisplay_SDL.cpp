@@ -309,6 +309,18 @@ void MediaDisplay_SDL::exec()
         {
             break;
         }
+        else if (m_SDLEvent.type == SDL_KEYDOWN)
+        {
+            if (m_SDLEvent.key.keysym.sym == SDLK_ESCAPE)
+            {
+                m_playState.exit = 1;
+            }
+            if (m_SDLEvent.key.keysym.sym == SDLK_SPACE)
+            {
+                m_playState.pause = !m_playState.pause;
+                SDL_PauseAudio(m_playState.pause);
+            }
+        }
     }
 }
 

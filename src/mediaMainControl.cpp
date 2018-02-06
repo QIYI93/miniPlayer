@@ -129,18 +129,20 @@ bool MediaMainControl::openFile(const char *file)
 void MediaMainControl::closeFile()
 {
     m_isQuit = true;
+
+    if (m_videoPktQueue && m_audioPktQueue)
+    {
+        m_videoPktQueue->clean();
+        m_audioPktQueue->clean();
+        m_separatePktThread.join();
+    }
+
     if (m_videoFrameQueue && m_audioFrameQueue)
     {
         m_videoFrameQueue->clean();
         m_audioFrameQueue->clean();
         m_decodeAudioThread.join();
         m_decodeVideoThread.join();
-    }
-    if (m_videoPktQueue && m_audioPktQueue)
-    {
-        m_videoPktQueue->clean();
-        m_audioPktQueue->clean();
-        m_separatePktThread.join();
     }
 
     cleanPktQueue();
@@ -175,13 +177,16 @@ void MediaMainControl::initSeparatePktThread(void *mainCtrl)
         while (true)
         {
             if (!mainCtl->m_formatCtx) break;
-            if (mainCtl->m_isQuit) break;
+            if (mainCtl->m_isQuit)
+            {
+                mainCtl->m_noPktToSperate = true;
+                break;
+            }
             int ret = av_read_frame(mainCtl->m_formatCtx, pAVPacket);
             if (ret != NULL)
             {
                 if (ret == AVERROR_EOF)
                 {
-                    std::unique_lock<std::mutex> lock(mainCtl->m_mutex);
                     mainCtl->m_noPktToSperate = true;
                     break;
                 }

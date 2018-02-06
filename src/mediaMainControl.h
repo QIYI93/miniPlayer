@@ -94,8 +94,7 @@ private:
     int32_t m_audioClock = 0;
     std::mutex m_mutex;
 
-    bool m_noPktToSperate = false;
-
+    std::atomic_bool m_noPktToSperate = false;
     std::atomic_bool m_isQuit = false;
     std::thread m_separatePktThread;
     std::thread m_decodeVideoThread;
