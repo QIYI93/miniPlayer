@@ -38,6 +38,7 @@ MediaDisplay_SDL::~MediaDisplay_SDL()
 {
     SDL_Quit();
     av_free(*m_videoBuffer.data);
+    av_free(m_audioBuffer.PCMBuffer);
 }
 
 bool MediaDisplay_SDL::init()
@@ -53,15 +54,36 @@ bool MediaDisplay_SDL::init()
 
 bool MediaDisplay_SDL::initVideoSetting(int width, int height, const char *title)
 {
+    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+    int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+
     m_windowRect.x = 0;
     m_windowRect.y = 0;
-    m_windowRect.w = width;
-    m_windowRect.h = height;
+
+    auto getScale = [](int beforeWidth,int beforeHeight,int afterWidth,int afterHeight)->double
+    {
+        double narrowRateW = 1.0, narrowRateH = 1.0;
+        narrowRateW = (double)afterWidth / (double)beforeWidth;
+        narrowRateH = (double)afterHeight / (double)beforeHeight;
+        return narrowRateW > narrowRateH ? narrowRateW : narrowRateH;
+    };
+
+    if (width <= screenWidth&&height <= screenHeight)
+    {
+        m_windowRect.w = width;
+        m_windowRect.h = height;
+    }
+    else
+    {
+        auto scale = getScale(width, height, screenWidth, screenHeight);
+        m_windowRect.w = width * scale;
+        m_windowRect.h = height * scale;
+    }
 
     wchar_t wTitle[1024];
     char utf8Title[1024];
-    NarrowToWideBuf(title, wTitle);
-    WideToUTF8Buf(wTitle, utf8Title);
+    util::NarrowToWideBuf(title, wTitle);
+    util::WideToUTF8Buf(wTitle, utf8Title);
 
     m_window.reset(SDL_CreateWindow(utf8Title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, m_windowRect.w, m_windowRect.h, SDL_WINDOW_SHOWN));
     if (m_window == nullptr)
@@ -300,7 +322,7 @@ void MediaDisplay_SDL::getDelay()
     int32_t 		compare = 0.0;
 
 
-    if (m_playState.currentVideoTime == 0 && currentAudioTimeAfterModified == 0)
+    if (m_playState.currentVideoTime == 0 || currentAudioTimeAfterModified == 0)
     {
         m_playState.delay = m_fps;
         return;

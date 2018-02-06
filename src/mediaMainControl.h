@@ -31,7 +31,10 @@ class SwrContext;
 class MediaMainControl
 {
 public:
-    static MediaMainControl* getInstance();
+    //static MediaMainControl* getInstance();
+    MediaMainControl();
+    ~MediaMainControl();
+
     bool openFile(const char *file);
     void closeFile();
 
@@ -43,12 +46,10 @@ public:
     bool getGraphicData(GraphicDataType type, int width, int height, void *data, const uint32_t size, int *lineSize, int32_t *pts);
     bool getPCMData(void *data, const uint32_t size, const AudioParams para, int32_t *pts, int32_t *outLen);
 
-    bool isAudioFrameEmpty() { return m_audioFrameQueue->m_noMorePktToDecode && m_audioFrameQueue->m_queue.empty(); }
-    bool isVideoFrameEmpty() { return m_videoFrameQueue->m_noMorePktToDecode && m_videoFrameQueue->m_queue.empty(); }
+    bool isAudioFrameEmpty() { return m_audioFrameQueue->m_noMorePktToDecode.load() && m_audioFrameQueue->m_queue.empty(); }
+    bool isVideoFrameEmpty() { return m_videoFrameQueue->m_noMorePktToDecode.load() && m_videoFrameQueue->m_queue.empty(); }
 
 private:
-    MediaMainControl();
-    ~MediaMainControl();
 
     void initPktQueue();
     void initFrameQueue();
@@ -71,6 +72,9 @@ private:
 
     SwsContext *m_swsCtx = nullptr;
     SwrContext *m_swrCtx = nullptr;
+
+    AVFrame* m_audioFrameRaw = nullptr;
+    AVFrame* m_videoFrameRaw = nullptr;
 
     PacketQueue *m_videoPktQueue = nullptr;
     PacketQueue *m_audioPktQueue = nullptr;
@@ -96,6 +100,7 @@ private:
     std::thread m_separatePktThread;
     std::thread m_decodeVideoThread;
     std::thread m_decodeAudioThread;
+
 };
 
 #endif

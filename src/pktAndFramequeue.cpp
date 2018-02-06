@@ -14,7 +14,7 @@ bool PacketQueue::enQueue(const AVPacket *packet)
     }
     m_queue.push(pkt);
     m_size += pkt->size;
-    m_condDeQueue.notify_all();
+    //m_condDeQueue.notify_all();
     return true;
 
 }
@@ -23,10 +23,10 @@ bool PacketQueue::deQueue(AVPacket *packet, bool block)
 {
     bool ret = true;
     std::unique_lock<std::mutex> lock(m_mutex);
-    if (m_queue.empty())
-    {
-        m_condDeQueue.wait(lock);
-    }
+    //while (m_queue.empty())
+    //{
+    //    m_condDeQueue.wait(lock);
+    //}
     if (av_packet_ref(packet, m_queue.front()) < 0)
     {
         ret = false;
@@ -72,7 +72,7 @@ bool FrameQueue::enQueue(const AVFrame *frame_)
         m_condEnQueue.wait(lock);
     }
     m_queue.push(frame);
-    m_condDeQueue.notify_all();
+    //m_condDeQueue.notify_all();
     return true;
 }
 
@@ -80,10 +80,10 @@ bool FrameQueue::deQueue(AVFrame *frame, bool block)
 {
     bool ret = true;
     std::unique_lock<std::mutex> lock(m_mutex);
-    while (m_queue.empty())
-    {
-        m_condDeQueue.wait(lock);
-    }
+    //while (m_queue.empty())
+    //{
+    //    m_condDeQueue.wait(lock);
+    //}
     if (av_frame_ref(frame, m_queue.front()) < 0)
     {
         ret = false;

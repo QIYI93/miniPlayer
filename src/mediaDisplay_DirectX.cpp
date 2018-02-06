@@ -209,7 +209,7 @@ bool MediaDisplay_Directx::initVideoSetting(int width, int height, const char *t
 {
     //initialize window
     wchar_t wTitle[1024];
-    NarrowToWideBuf(title, wTitle);
+    util::NarrowToWideBuf(title, wTitle);
     SetWindowText(m_mainWnd, wTitle);
 
     int x = GetSystemMetrics(SM_CXSCREEN);

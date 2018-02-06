@@ -11,29 +11,29 @@ extern "C"
 #include <libswresample/swresample.h>
 }
 
+#include "util.h"
 #include "mediaDisplay.h"
 namespace
 {
     auto const errMsgBufferSize = 2048;
     auto const maxAudioFrameSize = 192000;
-    auto const maxPktQueueSize = 40;
-    auto const maxFrameQueueSize = 40;
-    std::mutex s_mutex;
+    auto const maxAudioPktQueueSize = 50;
+    auto const maxVideoPktQueueSize = 20;
+    auto const maxAudioFrameQueueSize = 100;
+    auto const maxVideoFrameQueueSize = 20;
+
+    auto const waitTime = 5;
 }
 
-void msgOutput(const char* msg)
-{
-    std::unique_lock<std::mutex> lock(s_mutex);
-    std::cout << "[Custom]: " << msg << std::endl;
-}
-
-MediaMainControl* MediaMainControl::getInstance()
-{
-    static MediaMainControl mediaMainControl;
-    return &mediaMainControl;
-}
+//MediaMainControl* MediaMainControl::getInstance()
+//{
+//    static MediaMainControl mediaMainControl;
+//    return &mediaMainControl;
+//}
 
 MediaMainControl::MediaMainControl()
+    :m_audioFrameRaw(av_frame_alloc())
+    ,m_videoFrameRaw(av_frame_alloc())
 {
     av_register_all();
     m_errMsgBuffer = (char*)malloc(errMsgBufferSize * sizeof(char));
@@ -42,6 +42,9 @@ MediaMainControl::MediaMainControl()
 MediaMainControl::~MediaMainControl()
 {
     free(m_errMsgBuffer);
+
+    av_frame_free(&m_audioFrameRaw);
+    av_frame_free(&m_videoFrameRaw);
     closeFile();
 }
 
@@ -53,12 +56,12 @@ bool MediaMainControl::openFile(const char *file)
     if (ret != 0)
     {
         av_strerror(ret, m_errMsgBuffer, errMsgBufferSize);
-        msgOutput(m_errMsgBuffer);
+        av_log(nullptr, AV_LOG_ERROR, m_errMsgBuffer);
         return false;
     }
     if (avformat_find_stream_info(m_formatCtx, nullptr) < 0)
     {
-        msgOutput("could not find codec parameters.");
+        av_log(nullptr, AV_LOG_ERROR, "Could not find codec parameters.");
         return false;
     }
 
@@ -74,20 +77,30 @@ bool MediaMainControl::openFile(const char *file)
     if(m_videoStreamIndex >= 0)
         m_videoCodec = avcodec_find_decoder(m_formatCtx->streams[m_videoStreamIndex]->codecpar->codec_id);
     if (m_videoCodec == nullptr)
-        msgOutput("Not found video decoder.");
+    {
+        av_log(nullptr, AV_LOG_ERROR, "Not found video decoder.");
+    }
     else
     {
-        if (m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate.den != NULL&&m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate.num != NULL)
+        if (m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate.den != NULL && m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate.num != NULL)
             m_fps = av_q2d(m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate);
 
         m_videoCodecCtx = avcodec_alloc_context3(m_videoCodec);
         avcodec_parameters_to_context(m_videoCodecCtx, m_formatCtx->streams[m_videoStreamIndex]->codecpar);
+        ///////////////////multi-thread setting//////////////////////////
+        m_videoCodecCtx->thread_count = util::getNoOfProcessors();
+        m_videoCodecCtx->thread_type = FF_THREAD_FRAME;
+        /////////////////////////////////////////////////////////////////
+        if (m_videoCodecCtx->codec->capabilities & CODEC_CAP_TRUNCATED)
+            m_videoCodecCtx->flags |= CODEC_FLAG_TRUNCATED;
+
         ret = avcodec_open2(m_videoCodecCtx, m_videoCodec, nullptr);
         if (ret != 0)
         {
             av_strerror(ret, m_errMsgBuffer, errMsgBufferSize);
-            msgOutput(m_errMsgBuffer);
+            av_log(nullptr, AV_LOG_ERROR, m_errMsgBuffer);
         }
+
         m_frameWidth = m_videoCodecCtx->coded_width;
         m_frameHeight = m_videoCodecCtx->coded_height;
     }
@@ -95,7 +108,9 @@ bool MediaMainControl::openFile(const char *file)
     if (m_audioStreamIndex >= 0)
         m_audioCodec = avcodec_find_decoder(m_formatCtx->streams[m_audioStreamIndex]->codecpar->codec_id);
     if (m_audioCodec == nullptr)
-        msgOutput("Not found audio decoder.");
+    {
+        av_log(nullptr, AV_LOG_ERROR, "Not found audio decoder.");
+    }
     else
     {
         m_audioCodecCtx = avcodec_alloc_context3(m_audioCodec);
@@ -104,7 +119,7 @@ bool MediaMainControl::openFile(const char *file)
         if (ret != 0)
         {
             av_strerror(ret, m_errMsgBuffer, errMsgBufferSize);
-            msgOutput(m_errMsgBuffer);
+            av_log(nullptr, AV_LOG_ERROR, m_errMsgBuffer);
         }
     }
     m_file = file;
@@ -137,7 +152,10 @@ void MediaMainControl::closeFile()
     avcodec_free_context(&m_audioCodecCtx);
 
     if (m_swsCtx)
+    {
         sws_freeContext(m_swsCtx);
+        m_swsCtx = nullptr;
+    }
 
     if (m_swrCtx)
         swr_free(&m_swrCtx);
@@ -152,12 +170,12 @@ void MediaMainControl::initSeparatePktThread(void *mainCtrl)
     {
         MediaMainControl *mainCtl = static_cast<MediaMainControl*>(d);
         AVPacket *pAVPacket = (AVPacket*)av_malloc(sizeof(AVPacket));
-        int audioPktCount = 0;
-        int videoPktCount = 0;
+        //int audioPktCount = 0;
+        //int videoPktCount = 0;
         while (true)
         {
-            if (!mainCtl->m_formatCtx) return;
-            if (mainCtl->m_isQuit) return;
+            if (!mainCtl->m_formatCtx) break;
+            if (mainCtl->m_isQuit) break;
             int ret = av_read_frame(mainCtl->m_formatCtx, pAVPacket);
             if (ret != NULL)
             {
@@ -168,7 +186,7 @@ void MediaMainControl::initSeparatePktThread(void *mainCtrl)
                     break;
                 }
                 av_strerror(ret, mainCtl->m_errMsgBuffer, errMsgBufferSize);
-                msgOutput(mainCtl->m_errMsgBuffer);
+                av_log(nullptr, AV_LOG_INFO, mainCtl->m_errMsgBuffer);
                 continue;
             }
             //enqueue packet
@@ -199,31 +217,31 @@ void MediaMainControl::initDecodePktThread(void *mainCtrl)
         MediaMainControl *mainCtl = static_cast<MediaMainControl*>(d);
         AVFrame *frame = av_frame_alloc();
         AVPacket *videoPacket = av_packet_alloc();
-        int videoFrameCount = 0;
         while (true)
         {
-            if (!mainCtl->m_formatCtx) return;
-            if (mainCtl->m_isQuit) return;
+            if (!mainCtl->m_formatCtx) break;
+            if (mainCtl->m_isQuit) break;
+
+            while (mainCtl->m_videoPktQueue->m_queue.empty() && !mainCtl->m_noPktToSperate)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(waitTime));
+            }
+            if (mainCtl->m_videoPktQueue->m_queue.empty())
+            {
+                mainCtl->m_videoFrameQueue->m_noMorePktToDecode.store(true);
+                break;
+            }
             //decode video pkt
             mainCtl->m_videoPktQueue->deQueue(videoPacket);
             if (avcodec_send_packet(mainCtl->m_videoCodecCtx, videoPacket) == NULL)
             {
                 if (avcodec_receive_frame(mainCtl->m_videoCodecCtx, frame) == NULL)
                 {
-                    //printf("video frame count:%d\n", ++videoFrameCount);
                     mainCtl->m_videoFrameQueue->enQueue(frame);
                     av_frame_unref(frame);
                 }
             }
             av_packet_unref(videoPacket);
-            {
-                std::unique_lock<std::mutex> lock(mainCtl->m_mutex);
-                if (mainCtl->m_noPktToSperate && mainCtl->m_videoPktQueue->m_queue.empty())
-                {
-                    mainCtl->m_videoFrameQueue->m_noMorePktToDecode = true;
-                    break;
-                }
-            }
         }
         av_packet_free(&videoPacket);
         av_frame_free(&frame);
@@ -234,31 +252,30 @@ void MediaMainControl::initDecodePktThread(void *mainCtrl)
         MediaMainControl *mainCtl = static_cast<MediaMainControl*>(d);
         AVFrame *frame = av_frame_alloc();
         AVPacket *audioPacket = av_packet_alloc();
-        int audioFrameCount = 0;
         while (true)
         {
-            if (!mainCtl->m_formatCtx) return;
-            if (mainCtl->m_isQuit) return;
+            if (!mainCtl->m_formatCtx) break;
+            if (mainCtl->m_isQuit) break;
+            while (mainCtl->m_audioPktQueue->m_queue.empty() && !mainCtl->m_noPktToSperate)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(waitTime));
+            }
+            if (mainCtl->m_audioPktQueue->m_queue.empty())
+            {
+                mainCtl->m_audioFrameQueue->m_noMorePktToDecode.store(true);
+                break;
+            }
             //decode audio pkt
             mainCtl->m_audioPktQueue->deQueue(audioPacket);
             if (avcodec_send_packet(mainCtl->m_audioCodecCtx, audioPacket) == NULL)
             {
                 while (avcodec_receive_frame(mainCtl->m_audioCodecCtx, frame) == NULL)
                 {
-                    //printf("audio Frame Count:%d\n", ++audioFrameCount);
                     mainCtl->m_audioFrameQueue->enQueue(frame);
                     av_frame_unref(frame);
                 }
             }
             av_packet_unref(audioPacket);
-            {
-                std::unique_lock<std::mutex> lock(mainCtl->m_mutex);
-                if (mainCtl->m_noPktToSperate && mainCtl->m_audioPktQueue->m_queue.empty())
-                {
-                    mainCtl->m_audioFrameQueue->m_noMorePktToDecode = true;
-                    break;
-                }
-            }
         }
         av_packet_free(&audioPacket);
         av_frame_free(&frame);
@@ -297,16 +314,14 @@ bool MediaMainControl::getGraphicData(GraphicDataType type, int width, int heigh
 
     if (!m_swsCtx)
     {
-        msgOutput("sws_getCachedContext failed.");
+        av_log(nullptr, AV_LOG_ERROR, "sws_getCachedContext failed.");
         return false;
     }
-    AVFrame* videoFrameRaw = nullptr;
-    videoFrameRaw = av_frame_alloc();
-    m_videoFrameQueue->deQueue(videoFrameRaw);
-    int ret = sws_scale(m_swsCtx, (const uint8_t* const*)videoFrameRaw->data, videoFrameRaw->linesize, 0, m_videoCodecCtx->height, (uint8_t *const*)data, lineSize);
-    *pts = getVideoFramPts(videoFrameRaw);
-    av_frame_unref(videoFrameRaw);
-    av_frame_free(&videoFrameRaw);
+
+    m_videoFrameQueue->deQueue(m_videoFrameRaw);
+    int ret = sws_scale(m_swsCtx, (const uint8_t* const*)m_videoFrameRaw->data, m_videoFrameRaw->linesize, 0, m_videoCodecCtx->height, (uint8_t *const*)data, lineSize);
+    *pts = getVideoFramPts(m_videoFrameRaw);
+    av_frame_unref(m_videoFrameRaw);
 
     if (ret > 0)
         return true;
@@ -382,13 +397,10 @@ bool MediaMainControl::getPCMData(void *data, const uint32_t inLen, const AudioP
         return false;
     }
 
-    AVFrame* audioFrameRaw = nullptr;
-    audioFrameRaw = av_frame_alloc();
-    m_audioFrameQueue->deQueue(audioFrameRaw);
-    int ret = swr_convert(m_swrCtx, (uint8_t**)&data, inLen, (const uint8_t **)audioFrameRaw->data, audioFrameRaw->nb_samples);
-    *pts = getAudioFramPts(audioFrameRaw);
-    av_frame_unref(audioFrameRaw);
-    av_frame_free(&audioFrameRaw);
+    m_audioFrameQueue->deQueue(m_audioFrameRaw);
+    int ret = swr_convert(m_swrCtx, (uint8_t**)&data, inLen, (const uint8_t **)m_audioFrameRaw->data, m_audioFrameRaw->nb_samples);
+    *pts = getAudioFramPts(m_audioFrameRaw);
+    av_frame_unref(m_audioFrameRaw);
 
     *outLen =  ret * para.frameSize;
 
@@ -432,8 +444,8 @@ void MediaMainControl::initPktQueue()
     cleanPktQueue();
     m_videoPktQueue = new PacketQueue();
     m_audioPktQueue = new PacketQueue();
-    m_videoPktQueue->m_maxElements = maxPktQueueSize;
-    m_audioPktQueue->m_maxElements = maxPktQueueSize;
+    m_videoPktQueue->m_maxElements = maxVideoPktQueueSize;
+    m_audioPktQueue->m_maxElements = maxVideoPktQueueSize;
 }
 
 void MediaMainControl::initFrameQueue()
@@ -441,8 +453,8 @@ void MediaMainControl::initFrameQueue()
     cleanFrameQueue();
     m_videoFrameQueue = new FrameQueue();
     m_audioFrameQueue = new FrameQueue();
-    m_videoFrameQueue->m_maxElements = maxFrameQueueSize;
-    m_audioFrameQueue->m_maxElements = maxFrameQueueSize;
+    m_videoFrameQueue->m_maxElements = maxVideoFrameQueueSize;
+    m_audioFrameQueue->m_maxElements = maxAudioFrameQueueSize;
 }
 
 void MediaMainControl::play()
@@ -453,7 +465,7 @@ void MediaMainControl::play()
     initSeparatePktThread(this);
     initDecodePktThread(this);
 
-    MediaDisplay *mediaDisplay = MediaDisplay::createDisplayInstance(this, DisplayType::USING_DIRECTX);
+    MediaDisplay *mediaDisplay = MediaDisplay::createDisplayInstance(this, DisplayType::USING_SDL);
     if (mediaDisplay == nullptr)
     {
         av_log(NULL, AV_LOG_ERROR, "Cannot create display instance!\n");
@@ -472,6 +484,55 @@ void MediaMainControl::play()
     }
     mediaDisplay->exec();
     MediaDisplay::destroyDisplayInstance(mediaDisplay);
+
+    //auto func1 = [&]
+    //{
+    //    AVFrame* audioFrameRaw = nullptr;
+    //    audioFrameRaw = av_frame_alloc();
+    //    int audioFrameCount = 0;
+    //    while (true)
+    //    {
+    //        while (!m_audioFrameQueue->m_noMorePktToDecode.load() && m_audioFrameQueue->m_queue.empty())
+    //        {
+    //            std::this_thread::sleep_for(std::chrono::milliseconds(waitTime));
+    //        }
+    //        if(m_audioFrameQueue->m_queue.empty())
+    //            break;
+    //        m_audioFrameQueue->deQueue(audioFrameRaw);
+    //        av_frame_unref(audioFrameRaw);
+    //        audioFrameCount++;
+    //        printf("audio count:%d\n", audioFrameCount);
+    //    }
+    //    av_frame_free(&audioFrameRaw);
+    //};
+
+    //auto func2 = [&]
+    //{
+    //    AVFrame* videoFrameRaw = nullptr;
+    //    videoFrameRaw = av_frame_alloc();
+    //    int videoFrameCount = 0;
+    //    while (true)
+    //    {
+    //        while (!m_videoFrameQueue->m_noMorePktToDecode.load() && m_videoFrameQueue->m_queue.empty())
+    //        {
+    //            std::this_thread::sleep_for(std::chrono::milliseconds(waitTime));
+    //        }
+    //        if (m_videoFrameQueue->m_queue.empty())
+    //            break;
+    //        m_videoFrameQueue->deQueue(videoFrameRaw);
+    //        av_frame_unref(videoFrameRaw);
+    //        videoFrameCount++;
+    //        printf("video count:%d\n", videoFrameCount);
+    //    }
+    //    av_frame_free(&videoFrameRaw);
+    //};
+    //std::thread(func1).detach();
+    //std::thread(func2).detach();
+
+    //while (!m_videoFrameQueue->m_noMorePktToDecode || !m_audioFrameQueue->m_noMorePktToDecode)
+    //{
+    //    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    //}
 }
 
 void MediaMainControl::stop()
