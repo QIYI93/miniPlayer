@@ -22,6 +22,10 @@ enum class GraphicDataType :int
     BGRA,
 };
 
+typedef struct DecodeContext {
+    AVBufferRef *hwDeviceRef;
+} DecodeContext;
+
 class AVCodec;
 class SwsContext;
 class MediaDisplay;
@@ -46,8 +50,8 @@ public:
     bool getGraphicData(GraphicDataType type, int width, int height, void *data, const uint32_t size, int *lineSize, int32_t *pts);
     bool getPCMData(void *data, const uint32_t size, const AudioParams para, int32_t *pts, int32_t *outLen);
 
-    bool isAudioFrameEmpty() { return m_audioFrameQueue->m_noMorePktToDecode.load() && m_audioFrameQueue->m_queue.empty(); }
-    bool isVideoFrameEmpty() { return m_videoFrameQueue->m_noMorePktToDecode.load() && m_videoFrameQueue->m_queue.empty(); }
+    bool isAudioFrameEmpty() { return m_audioFrameQueue->m_noMorePktToDecode && m_audioFrameQueue->m_queue.empty(); }
+    bool isVideoFrameEmpty() { return m_videoFrameQueue->m_noMorePktToDecode && m_videoFrameQueue->m_queue.empty(); }
 
 private:
 
@@ -72,6 +76,8 @@ private:
 
     SwsContext *m_swsCtx = nullptr;
     SwrContext *m_swrCtx = nullptr;
+
+    DecodeContext m_decode = { NULL };
 
     AVFrame* m_audioFrameRaw = nullptr;
     AVFrame* m_videoFrameRaw = nullptr;

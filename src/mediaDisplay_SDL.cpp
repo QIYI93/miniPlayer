@@ -23,6 +23,9 @@ namespace
 
     auto const SDLAudioMinBufferSize = 512;     //copy from ffplay
     auto const SDLAduioMaxCallBackPerSec = 30;  //copy from ffplay
+
+    auto const defaultVolume = 64;
+    auto const volumeChangeInterval = 2;
 }
 
 MediaDisplay_SDL::MediaDisplay_SDL(MediaMainControl *mainCtrl)
@@ -32,6 +35,7 @@ MediaDisplay_SDL::MediaDisplay_SDL(MediaMainControl *mainCtrl)
     , m_texture(nullptr, SDL_DestroyTexture)
 {
     m_displayType = DisplayType::USING_SDL;
+    m_playState.volume = defaultVolume;
 }
 
 MediaDisplay_SDL::~MediaDisplay_SDL()
@@ -136,7 +140,7 @@ void MediaDisplay_SDL::fillAudioBuffer(void *udata, Uint8 *stream, int len)
                 }
             }
             len1 = (len > audioBuffer->restSize ? audioBuffer->restSize : len);
-            SDL_MixAudio(stream + index, audioBuffer->pos, len1, SDL_MIX_MAXVOLUME);
+            SDL_MixAudio(stream + index, audioBuffer->pos, len1, mediaDisplay->m_playState.volume);
             index += len1;
             audioBuffer->pos += len1;
             audioBuffer->restSize -= len1;
@@ -270,7 +274,7 @@ void MediaDisplay_SDL::exec()
         SDL_WaitEvent(&m_SDLEvent);
         if (m_mainCtrl->isAudioFrameEmpty() && m_mainCtrl->isVideoFrameEmpty())
         {
-            m_playState.exit = 1;
+            m_playState.exit = true;
         }
         if (m_SDLEvent.type == REFRESH_VIDEO_EVENT)
         {
@@ -303,7 +307,7 @@ void MediaDisplay_SDL::exec()
         }
         else if (m_SDLEvent.type == SDL_QUIT)
         {
-            m_playState.exit = 1;
+            m_playState.exit = true;
         }
         else if (m_SDLEvent.type == BREAK_EVENT)
         {
@@ -313,12 +317,20 @@ void MediaDisplay_SDL::exec()
         {
             if (m_SDLEvent.key.keysym.sym == SDLK_ESCAPE)
             {
-                m_playState.exit = 1;
+                m_playState.exit = true;
             }
             if (m_SDLEvent.key.keysym.sym == SDLK_SPACE)
             {
                 m_playState.pause = !m_playState.pause;
                 SDL_PauseAudio(m_playState.pause);
+            }
+            if (m_SDLEvent.key.keysym.sym == SDLK_UP)
+            {
+                m_playState.volume = SDL_MIX_MAXVOLUME < m_playState.volume + volumeChangeInterval ? SDL_MIX_MAXVOLUME : m_playState.volume + volumeChangeInterval;
+            }
+            if (m_SDLEvent.key.keysym.sym == SDLK_DOWN)
+            {
+                m_playState.volume = NULL > m_playState.volume - volumeChangeInterval ? NULL : m_playState.volume - volumeChangeInterval;
             }
         }
     }
@@ -326,6 +338,12 @@ void MediaDisplay_SDL::exec()
 
 void MediaDisplay_SDL::getDelay()
 {
+    if (!m_playState.audioDisplay)
+    {
+        m_playState.delay = m_fps;
+        return;
+    }
+
     int32_t currentAudioTimeAfterModified = m_playState.currentAudioTime - ((m_audioBuffer.restSize / m_audioBuffer.bytesPerSec) / 1000);
 
     static int32_t threshold = (1 / (float)m_fps) * 1000;

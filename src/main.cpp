@@ -16,9 +16,11 @@ int main(int argc, char * argv[])
     const char *file = argv[1];
 
     MediaMainControl ctrl;
-    ctrl.openFile(file);
-    ctrl.play();
-    ctrl.closeFile();
+    if (ctrl.openFile(file))
+    {
+        ctrl.play();
+        ctrl.closeFile();
+    }
 
     return 0;
 }

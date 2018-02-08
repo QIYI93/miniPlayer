@@ -8,11 +8,17 @@ extern "C"
 #include <libavformat/avformat.h>
 #include <libswscale/swscale.h>
 #include <libavutil/imgutils.h>
+#include <libavutil/hwcontext.h>
+#include <libavutil/hwcontext_qsv.h>
 #include <libswresample/swresample.h>
 }
 
 #include "util.h"
 #include "mediaDisplay.h"
+
+#define USE_QSV_DECODER 1
+
+
 namespace
 {
     auto const errMsgBufferSize = 2048;
@@ -74,8 +80,27 @@ bool MediaMainControl::openFile(const char *file)
     m_audioStreamIndex = av_find_best_stream(m_formatCtx, AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, NULL);
 
     //Open video and audio codec and create codec context
-    if(m_videoStreamIndex >= 0)
-        m_videoCodec = avcodec_find_decoder(m_formatCtx->streams[m_videoStreamIndex]->codecpar->codec_id);
+    if (m_videoStreamIndex >= 0)
+    {
+        //Support QSV Decoder???
+        bool supportQSV = false;
+#if USE_QSV_DECODER
+        if (m_formatCtx->streams[m_videoStreamIndex]->codecpar->codec_id == AV_CODEC_ID_H264)
+        {
+            if (av_hwdevice_ctx_create(&m_decode.hwDeviceRef, AV_HWDEVICE_TYPE_QSV, "auto", NULL, 0) >= 0)
+            {
+                m_videoCodec = avcodec_find_decoder_by_name("h264_qsv");
+                if (!m_videoCodec)
+                {
+                    av_log(nullptr, AV_LOG_ERROR, "Not support QSV decoder.");
+                }
+                supportQSV = true;
+            }
+        }
+#endif
+        if(!supportQSV)
+            m_videoCodec = avcodec_find_decoder(m_formatCtx->streams[m_videoStreamIndex]->codecpar->codec_id);
+    }
     if (m_videoCodec == nullptr)
     {
         av_log(nullptr, AV_LOG_ERROR, "Not found video decoder.");
@@ -238,9 +263,9 @@ void MediaMainControl::initDecodePktThread(void *mainCtrl)
             }
             //decode video pkt
             mainCtl->m_videoPktQueue->deQueue(videoPacket);
-            if (avcodec_send_packet(mainCtl->m_videoCodecCtx, videoPacket) == NULL)
+            if (avcodec_send_packet(mainCtl->m_videoCodecCtx, videoPacket) != AVERROR(EAGAIN))
             {
-                if (avcodec_receive_frame(mainCtl->m_videoCodecCtx, frame) == NULL)
+                if (avcodec_receive_frame(mainCtl->m_videoCodecCtx, frame) >= NULL)
                 {
                     mainCtl->m_videoFrameQueue->enQueue(frame);
                     av_frame_unref(frame);
@@ -323,6 +348,13 @@ bool MediaMainControl::getGraphicData(GraphicDataType type, int width, int heigh
         return false;
     }
 
+    while (!m_videoFrameQueue->m_noMorePktToDecode && m_videoFrameQueue->m_queue.empty())
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(waitTime));
+    }
+    if (m_videoFrameQueue->m_queue.empty())
+        return false;
+
     m_videoFrameQueue->deQueue(m_videoFrameRaw);
     int ret = sws_scale(m_swsCtx, (const uint8_t* const*)m_videoFrameRaw->data, m_videoFrameRaw->linesize, 0, m_videoCodecCtx->height, (uint8_t *const*)data, lineSize);
     *pts = getVideoFramPts(m_videoFrameRaw);
@@ -401,6 +433,13 @@ bool MediaMainControl::getPCMData(void *data, const uint32_t inLen, const AudioP
         swr_free(&m_swrCtx);
         return false;
     }
+
+    while (!m_audioFrameQueue->m_noMorePktToDecode && m_audioFrameQueue->m_queue.empty())
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(waitTime));
+    }
+    if (m_audioFrameQueue->m_queue.empty())
+        return false;
 
     m_audioFrameQueue->deQueue(m_audioFrameRaw);
     int ret = swr_convert(m_swrCtx, (uint8_t**)&data, inLen, (const uint8_t **)m_audioFrameRaw->data, m_audioFrameRaw->nb_samples);

@@ -2,6 +2,7 @@
 #define MEDIADISPLAY_H
 
 #include <mutex>
+#include <atomic>
 #include "mediaMainControl.h"
 
 enum class DisplayType :int
@@ -25,12 +26,12 @@ typedef struct Timebase {
 
 typedef struct PlayState
 {
-    bool pause = false;
-    bool exit = false;
+    std::atomic<bool> pause = false;
+    std::atomic<bool> exit = false;
     int32_t delay;
     int32_t currentAudioTime = 0;
     int32_t currentVideoTime = 0;
-
+    std::atomic<int>  volume;
     bool audioDisplay = false;
     bool videoDisplay = false;
 }PlayState;
