@@ -18,8 +18,8 @@ int main(int argc, char * argv[])
     MediaMainControl ctrl;
     if (ctrl.openFile(file))
     {
-        ctrl.play();
-        ctrl.closeFile();
+        //ctrl.play();
+        //ctrl.closeFile();
     }
 
     return 0;

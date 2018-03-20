@@ -6,6 +6,7 @@
 
 #include "mediaDisplay_SDL.h"
 #include "mediaDisplay_DirectX.h"
+#include "mediaDisply_D3D11.h"
 //#include "mediaDisplay_OpenGL.h"
 
 
@@ -29,8 +30,11 @@ MediaDisplay* MediaDisplay::createDisplayInstance(MediaMainControl* mainCtrl, Di
     case DisplayType::USING_SDL:
         mediaDisplay = new MediaDisplay_SDL(mainCtrl);
         break;
-    case DisplayType::USING_DIRECTX:
+    case DisplayType::USING_D3D9:
         mediaDisplay = new MediaDisplay_Directx(mainCtrl);
+        break;
+    case DisplayType::USING_D3D11:
+        mediaDisplay = new MediaDisplayD3D11(mainCtrl);
         break;
     case DisplayType::USING_OPENGL:
         //mediaDisplay = new mediaDisplay_OpenGL();
@@ -62,7 +66,7 @@ void MediaDisplay::msgOutput(MsgType type, const char* msg, ...)
     case DisplayType::USING_SDL:
         str1 = "[SDL]:";
         break;
-    case DisplayType::USING_DIRECTX:
+    case DisplayType::USING_D3D9:
         str1 = "[DirectX]:";
         break;
     case DisplayType::USING_OPENGL:

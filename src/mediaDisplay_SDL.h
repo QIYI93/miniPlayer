@@ -6,6 +6,7 @@
 
 extern "C"
 {
+#include "SDL_syswm.h"
 #include "SDL.h"
 }
 #include "mediaDisplay.h"
@@ -36,6 +37,7 @@ public:
     virtual bool initAudioSetting(int freq, uint8_t wantedChannels, uint32_t wantedChannelLayout) override;
 
     virtual void exec() override;
+    virtual HWND getWinHandle() override;
 
 private:
     MediaDisplay_SDL(MediaDisplay_SDL&) = delete;

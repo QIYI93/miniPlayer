@@ -383,3 +383,11 @@ void MediaDisplay_SDL::draw(const uint8_t *data, const int lineSize)
     SDL_RenderCopy(m_renderer.get(), m_texture.get(), nullptr, nullptr);
     SDL_RenderPresent(m_renderer.get());
 }
+
+HWND MediaDisplay_SDL::getWinHandle()
+{
+    SDL_SysWMinfo wmInfo;
+    SDL_VERSION(&wmInfo.version);
+    SDL_GetWindowWMInfo(m_window.get(), &wmInfo);
+    return wmInfo.info.win.window;
+}

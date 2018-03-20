@@ -44,6 +44,7 @@ public:
     virtual bool initAudioSetting(int freq, uint8_t wantedChannels, uint32_t wantedChannelLayout) override;
 
     virtual void exec() override;
+    virtual HWND getWinHandle() { return m_mainWnd; }
 
     static void renderNextFrame(WPARAM);
 private:

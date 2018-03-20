@@ -26,6 +26,7 @@ typedef struct DecodeContext {
     AVBufferRef *hwDeviceRef;
 } DecodeContext;
 
+class Dxva2Wrapper;
 class AVCodec;
 class SwsContext;
 class MediaDisplay;
@@ -64,6 +65,7 @@ private:
 
     int getVideoStreamIndex() { return m_videoStreamIndex; }
     int getAudioStreamIndex() { return m_audioStreamIndex; }
+    void setVideoDecoder();
     int32_t getVideoFramPts(AVFrame *pframe);
     int32_t getAudioFramPts(AVFrame *pframe);
 
@@ -73,7 +75,7 @@ private:
     AVCodec *m_audioCodec = nullptr;
     AVCodecContext *m_videoCodecCtx = nullptr;
     AVCodecContext *m_audioCodecCtx = nullptr;
-
+    Dxva2Wrapper *m_dxva2Wrapper = nullptr;
     SwsContext *m_swsCtx = nullptr;
     SwrContext *m_swrCtx = nullptr;
 

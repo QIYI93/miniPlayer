@@ -3,12 +3,14 @@
 
 #include <mutex>
 #include <atomic>
+#include <windows.h>
 #include "mediaMainControl.h"
 
 enum class DisplayType :int
 {
     USING_SDL = 0,  //using SDL libraries
-    USING_DIRECTX,  //using d3d9 and XAudio2 libraries
+    USING_D3D9,  //using d3d9 and XAudio2 libraries
+    USING_D3D11, //using d3d11 and XAudio2 libraries
     USING_OPENGL,   //using OpenGL and XAudio2 libraries
 };
 
@@ -45,7 +47,7 @@ public:
     virtual bool init() = 0;
     virtual bool initVideoSetting(int width, int height, const char *title) = 0;
     virtual bool initAudioSetting(int freq, uint8_t wantedChannels, uint32_t wantedChannelLayout) = 0;
-
+    virtual HWND getWinHandle() = 0;
     virtual void exec() = 0;
 
     void setVideoTimeBase(int num, int den) { m_videoTimeBase.num = num; m_videoTimeBase.den = den; }

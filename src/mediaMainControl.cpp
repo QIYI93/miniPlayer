@@ -14,10 +14,8 @@ extern "C"
 }
 
 #include "util.h"
+#include "dxva2Wrapper.h"
 #include "mediaDisplay.h"
-
-#define USE_QSV_DECODER 1
-
 
 namespace
 {
@@ -42,6 +40,7 @@ MediaMainControl::MediaMainControl()
     ,m_videoFrameRaw(av_frame_alloc())
 {
     av_register_all();
+    avformat_network_init();
     m_errMsgBuffer = (char*)malloc(errMsgBufferSize * sizeof(char));
 }
 
@@ -80,55 +79,7 @@ bool MediaMainControl::openFile(const char *file)
     m_audioStreamIndex = av_find_best_stream(m_formatCtx, AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, NULL);
 
     //Open video and audio codec and create codec context
-    if (m_videoStreamIndex >= 0)
-    {
-        //Support QSV Decoder???
-        bool supportQSV = false;
-#if USE_QSV_DECODER
-        if (m_formatCtx->streams[m_videoStreamIndex]->codecpar->codec_id == AV_CODEC_ID_H264)
-        {
-            if (av_hwdevice_ctx_create(&m_decode.hwDeviceRef, AV_HWDEVICE_TYPE_QSV, "auto", NULL, 0) >= 0)
-            {
-                m_videoCodec = avcodec_find_decoder_by_name("h264_qsv");
-                if (!m_videoCodec)
-                {
-                    av_log(nullptr, AV_LOG_ERROR, "Not support QSV decoder.");
-                }
-                supportQSV = true;
-            }
-        }
-#endif
-        if(!supportQSV)
-            m_videoCodec = avcodec_find_decoder(m_formatCtx->streams[m_videoStreamIndex]->codecpar->codec_id);
-    }
-    if (m_videoCodec == nullptr)
-    {
-        av_log(nullptr, AV_LOG_ERROR, "Not found video decoder.");
-    }
-    else
-    {
-        if (m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate.den != NULL && m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate.num != NULL)
-            m_fps = av_q2d(m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate);
-
-        m_videoCodecCtx = avcodec_alloc_context3(m_videoCodec);
-        avcodec_parameters_to_context(m_videoCodecCtx, m_formatCtx->streams[m_videoStreamIndex]->codecpar);
-        ///////////////////multi-thread setting//////////////////////////
-        m_videoCodecCtx->thread_count = util::getNoOfProcessors();
-        m_videoCodecCtx->thread_type = FF_THREAD_FRAME;
-        /////////////////////////////////////////////////////////////////
-        if (m_videoCodecCtx->codec->capabilities & CODEC_CAP_TRUNCATED)
-            m_videoCodecCtx->flags |= CODEC_FLAG_TRUNCATED;
-
-        ret = avcodec_open2(m_videoCodecCtx, m_videoCodec, nullptr);
-        if (ret != 0)
-        {
-            av_strerror(ret, m_errMsgBuffer, errMsgBufferSize);
-            av_log(nullptr, AV_LOG_ERROR, m_errMsgBuffer);
-        }
-
-        m_frameWidth = m_videoCodecCtx->coded_width;
-        m_frameHeight = m_videoCodecCtx->coded_height;
-    }
+    setVideoDecoder();
 
     if (m_audioStreamIndex >= 0)
         m_audioCodec = avcodec_find_decoder(m_formatCtx->streams[m_audioStreamIndex]->codecpar->codec_id);
@@ -149,6 +100,74 @@ bool MediaMainControl::openFile(const char *file)
     }
     m_file = file;
     return true;
+}
+
+void MediaMainControl::setVideoDecoder()
+{
+    if (m_videoStreamIndex >= 0)
+    {
+        m_videoCodec = avcodec_find_decoder(m_formatCtx->streams[m_videoStreamIndex]->codecpar->codec_id);
+    }
+    if (m_videoCodec == nullptr)
+    {
+        av_log(nullptr, AV_LOG_ERROR, "Not found video decoder.");
+        return;
+    }
+    else
+    {
+        if (m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate.den != NULL && m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate.num != NULL)
+            m_fps = av_q2d(m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate);
+        m_videoCodecCtx = avcodec_alloc_context3(m_videoCodec);
+        avcodec_parameters_to_context(m_videoCodecCtx, m_formatCtx->streams[m_videoStreamIndex]->codecpar);
+        bool isAccelSupport = true;
+        AVCodecContext *tempCodecCtx = m_videoCodecCtx;
+        memcpy(tempCodecCtx, m_videoCodecCtx, sizeof(m_videoCodecCtx));
+        switch (m_videoCodec->id)
+        {
+        case AV_CODEC_ID_MPEG2VIDEO:
+        case AV_CODEC_ID_H264:
+        case AV_CODEC_ID_VC1:
+        case AV_CODEC_ID_WMV3:
+        case AV_CODEC_ID_HEVC:
+        case AV_CODEC_ID_VP9:
+        {
+            m_videoCodecCtx->thread_count = 1;
+            Dxva2Wrapper *m_dxva2Wrapper = new Dxva2Wrapper(m_videoCodec, m_videoCodecCtx);
+            m_videoCodecCtx->opaque = m_dxva2Wrapper;
+            //create window
+            MediaDisplay *mediaDisplay = MediaDisplay::createDisplayInstance(this, DisplayType::USING_D3D11);
+            if (m_dxva2Wrapper->init(mediaDisplay->getWinHandle()) == 0)
+            {
+                //codecctx->get_buffer2 = ist->hwaccel_get_buffer;
+                //codecctx->get_format = GetHwFormat;
+                //codecctx->thread_safe_callbacks = 1;
+                break;
+            }
+        }
+        }
+
+
+
+
+
+        ///////////////////////multi-thread setting//////////////////////////
+        //m_videoCodecCtx->thread_count = util::getNoOfProcessors();
+        //m_videoCodecCtx->thread_type = FF_THREAD_FRAME;
+        ///////////////////////////////////////////////////////////////////
+        //if (m_videoCodecCtx->codec->capabilities & CODEC_CAP_TRUNCATED)
+        //    m_videoCodecCtx->flags |= CODEC_FLAG_TRUNCATED;
+
+        //int ret = avcodec_open2(m_videoCodecCtx, m_videoCodec, nullptr);
+        //if (ret != 0)
+        //{
+        //    av_strerror(ret, m_errMsgBuffer, errMsgBufferSize);
+        //    av_log(nullptr, AV_LOG_ERROR, m_errMsgBuffer);
+        //    return;
+        //}
+
+        //m_frameWidth = m_videoCodecCtx->coded_width;
+        //m_frameHeight = m_videoCodecCtx->coded_height;
+    }
 }
 
 void MediaMainControl::closeFile()

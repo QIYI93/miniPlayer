@@ -1,4 +1,4 @@
-#include "MediaDisplay_Directx.h"
+#include "mediaDisplay_DirectX.h"
 #include "util.h"
 
 
@@ -30,7 +30,7 @@ MediaDisplay_Directx::MediaDisplay_Directx(MediaMainControl *mainCtrl)
     , m_direct3DTexture(nullptr, [](IDirect3DTexture9 *p) {p->Release(); })
     , m_direct3DVertexBuffer(nullptr, [](IDirect3DVertexBuffer9 *p) {p->Release(); })
 {
-    m_displayType = DisplayType::USING_DIRECTX;
+    m_displayType = DisplayType::USING_D3D9;
     InitializeCriticalSection(&m_critial);
 }
 
