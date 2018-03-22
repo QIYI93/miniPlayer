@@ -1,5 +1,6 @@
 #include "mediaDisply_D3D11.h"
 #include "util.h"
+#include <cassert>
 
 extern "C"
 {
@@ -15,7 +16,7 @@ static LRESULT WINAPI winProc(HWND hwnd, UINT msg, WPARAM wparma, LPARAM lparam)
 MediaDisplayD3D11::MediaDisplayD3D11(MediaMainControl *mainCtrl)
     :MediaDisplay(mainCtrl)
 {
-    m_displayType = DisplayType::USING_D3D9;
+    m_displayType = DisplayType::USING_D3D11;
     InitializeCriticalSection(&m_critial);
 }
 
@@ -38,21 +39,73 @@ bool MediaDisplayD3D11::init()
     if (m_mainWnd == NULL)
         return false;
 
+    if (initD3D())
+        return false;
     return true;
 }
-
-bool MediaDisplayD3D11::initD3D(int width, int height)
+ 
+LRESULT WINAPI winProc(HWND hwnd, UINT msg, WPARAM wparma, LPARAM lparam)
 {
-    //IDXGIDevice * pDXGIDevice = nullptr;
-    //hr = g_pd3dDevice->QueryInterface(__uuidof(IDXGIDevice), (void **)&pDXGIDevice);
+    switch (msg)
+    {
+    case WM_DESTROY:
+        PostQuitMessage(0);
+        return 0;
+    }
+    return DefWindowProc(hwnd, msg, wparma, lparam);
+}
 
-    //IDXGIAdapter * pDXGIAdapter = nullptr;
-    //hr = pDXGIDevice->GetAdapter(&pDXGIAdapter);
+bool MediaDisplayD3D11::initD3D()
+{
+    D3DFactory::CreateFactory();
 
-    //IDXGIFactory * pIDXGIFactory = nullptr;
-    //pDXGIAdapter->GetParent(__uuidof(IDXGIFactory), (void **)&pIDXGIFactory);
+    m_adapter = D3DFactory::GetFirstAdapter();
+    m_ouputs = m_adapter->GetFirstOutput();
+  
+    UINT createDeviceFlags = 0;
+#ifdef _DEBUG
+    createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
+#endif
 
+    D3D_DRIVER_TYPE driverTypes[] =
+    {
+        D3D_DRIVER_TYPE_HARDWARE,
+        D3D_DRIVER_TYPE_WARP,
+        D3D_DRIVER_TYPE_REFERENCE,
+    };
+    UINT numDriverTypes = ARRAYSIZE(driverTypes);
 
+    D3D_FEATURE_LEVEL featureLevels[] =
+    {
+        D3D_FEATURE_LEVEL_11_0,
+        D3D_FEATURE_LEVEL_10_1,
+        D3D_FEATURE_LEVEL_10_0,
+    };
+    UINT numFeatureLevels = ARRAYSIZE(featureLevels);
+    HRESULT ret;
+    for (UINT driverTypeIndex = 0; driverTypeIndex < numDriverTypes; driverTypeIndex++)
+    {
+        m_driverType = driverTypes[driverTypeIndex];
+        ret = D3D11CreateDevice(
+            NULL,
+            m_driverType,
+            NULL,
+            createDeviceFlags,
+            NULL,
+            NULL,
+            D3D11_SDK_VERSION,
+            &m_D3D11Device,
+            &m_featureLevel,
+            &m_D3D11DeviceContext
+        );
+        if(SUCCEEDED(ret))
+            break;
+    }
+    if (FAILED(ret))
+        return false;
+
+    UINT msaaQuality;
+    m_D3D11Device->CheckMultisampleQualityLevels(DXGI_FORMAT_R8G8B8A8_UNORM, 4, &msaaQuality);
 
     return true;
 }
@@ -86,9 +139,4 @@ bool MediaDisplayD3D11::initAudioSetting(int freq, uint8_t wantedChannels, uint3
 void MediaDisplayD3D11::exec()
 {
 
-}
-
-LRESULT WINAPI winProc(HWND hwnd, UINT msg, WPARAM wparma, LPARAM lparam)
-{
-    return NULL;
 }

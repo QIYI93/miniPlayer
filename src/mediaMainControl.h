@@ -89,6 +89,8 @@ private:
     FrameQueue *m_videoFrameQueue = nullptr;
     FrameQueue *m_audioFrameQueue = nullptr;
 
+    MediaDisplay *m_mediaDisplay = nullptr;
+
     char *m_errMsgBuffer = nullptr;
     std::string m_file;
 

@@ -60,6 +60,7 @@ endif()
 
 set(CMAKE_INCLUDE_CURRENT_DIR TRUE)
 
+#src folder
 set(src_DIR "src")
 file(GLOB_RECURSE miniplayer_SRC
     "${src_DIR}/*.h*"
@@ -67,6 +68,13 @@ file(GLOB_RECURSE miniplayer_SRC
     "${src_DIR}/miniplayer.rc"
     )
 assign_source_group(${miniplayer_SRC})
+
+#DXGI
+set(DXGI_DIR "DXGI")
+file(GLOB_RECURSE DXGI_SRC
+    "${DXGI_DIR}/*.h*"
+    "${DXGI_DIR}/*.c*"
+    )
 
 #include_directories-------------
 #ffmpeg
@@ -82,6 +90,7 @@ link_directories("${CMAKE_CURRENT_LIST_DIR}/player_deps/sdl_deps/${LINK_SUFFIX}/
 
 add_executable(miniplayer WIN32
 	${miniplayer_SRC}
+	${DXGI_SRC}
     )
 
 if(WIN32)

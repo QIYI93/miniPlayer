@@ -79,7 +79,8 @@ bool MediaMainControl::openFile(const char *file)
     m_audioStreamIndex = av_find_best_stream(m_formatCtx, AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, NULL);
 
     //Open video and audio codec and create codec context
-    setVideoDecoder();
+    if(m_videoStreamIndex >= 0)
+        setVideoDecoder();
 
     if (m_audioStreamIndex >= 0)
         m_audioCodec = avcodec_find_decoder(m_formatCtx->streams[m_audioStreamIndex]->codecpar->codec_id);
@@ -104,10 +105,8 @@ bool MediaMainControl::openFile(const char *file)
 
 void MediaMainControl::setVideoDecoder()
 {
-    if (m_videoStreamIndex >= 0)
-    {
-        m_videoCodec = avcodec_find_decoder(m_formatCtx->streams[m_videoStreamIndex]->codecpar->codec_id);
-    }
+    m_videoCodec = avcodec_find_decoder(m_formatCtx->streams[m_videoStreamIndex]->codecpar->codec_id);
+
     if (m_videoCodec == nullptr)
     {
         av_log(nullptr, AV_LOG_ERROR, "Not found video decoder.");
@@ -115,6 +114,7 @@ void MediaMainControl::setVideoDecoder()
     }
     else
     {
+        m_mediaDisplay = MediaDisplay::createDisplayInstance(this, DisplayType::USING_D3D9); //create window
         if (m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate.den != NULL && m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate.num != NULL)
             m_fps = av_q2d(m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate);
         m_videoCodecCtx = avcodec_alloc_context3(m_videoCodec);
@@ -135,8 +135,8 @@ void MediaMainControl::setVideoDecoder()
             Dxva2Wrapper *m_dxva2Wrapper = new Dxva2Wrapper(m_videoCodec, m_videoCodecCtx);
             m_videoCodecCtx->opaque = m_dxva2Wrapper;
             //create window
-            MediaDisplay *mediaDisplay = MediaDisplay::createDisplayInstance(this, DisplayType::USING_D3D11);
-            if (m_dxva2Wrapper->init(mediaDisplay->getWinHandle()) == 0)
+           
+            if (m_dxva2Wrapper->init(m_mediaDisplay->getWinHandle()) == 0)
             {
                 //codecctx->get_buffer2 = ist->hwaccel_get_buffer;
                 //codecctx->get_format = GetHwFormat;
@@ -548,54 +548,6 @@ void MediaMainControl::play()
     mediaDisplay->exec();
     MediaDisplay::destroyDisplayInstance(mediaDisplay);
 
-    //auto func1 = [&]
-    //{
-    //    AVFrame* audioFrameRaw = nullptr;
-    //    audioFrameRaw = av_frame_alloc();
-    //    int audioFrameCount = 0;
-    //    while (true)
-    //    {
-    //        while (!m_audioFrameQueue->m_noMorePktToDecode.load() && m_audioFrameQueue->m_queue.empty())
-    //        {
-    //            std::this_thread::sleep_for(std::chrono::milliseconds(waitTime));
-    //        }
-    //        if(m_audioFrameQueue->m_queue.empty())
-    //            break;
-    //        m_audioFrameQueue->deQueue(audioFrameRaw);
-    //        av_frame_unref(audioFrameRaw);
-    //        audioFrameCount++;
-    //        printf("audio count:%d\n", audioFrameCount);
-    //    }
-    //    av_frame_free(&audioFrameRaw);
-    //};
-
-    //auto func2 = [&]
-    //{
-    //    AVFrame* videoFrameRaw = nullptr;
-    //    videoFrameRaw = av_frame_alloc();
-    //    int videoFrameCount = 0;
-    //    while (true)
-    //    {
-    //        while (!m_videoFrameQueue->m_noMorePktToDecode.load() && m_videoFrameQueue->m_queue.empty())
-    //        {
-    //            std::this_thread::sleep_for(std::chrono::milliseconds(waitTime));
-    //        }
-    //        if (m_videoFrameQueue->m_queue.empty())
-    //            break;
-    //        m_videoFrameQueue->deQueue(videoFrameRaw);
-    //        av_frame_unref(videoFrameRaw);
-    //        videoFrameCount++;
-    //        printf("video count:%d\n", videoFrameCount);
-    //    }
-    //    av_frame_free(&videoFrameRaw);
-    //};
-    //std::thread(func1).detach();
-    //std::thread(func2).detach();
-
-    //while (!m_videoFrameQueue->m_noMorePktToDecode || !m_audioFrameQueue->m_noMorePktToDecode)
-    //{
-    //    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    //}
 }
 
 void MediaMainControl::stop()

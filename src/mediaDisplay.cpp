@@ -5,7 +5,7 @@
 #include <string>
 
 #include "mediaDisplay_SDL.h"
-#include "mediaDisplay_DirectX.h"
+#include "mediaDisplay_D3D9.h"
 #include "mediaDisply_D3D11.h"
 //#include "mediaDisplay_OpenGL.h"
 
@@ -31,7 +31,7 @@ MediaDisplay* MediaDisplay::createDisplayInstance(MediaMainControl* mainCtrl, Di
         mediaDisplay = new MediaDisplay_SDL(mainCtrl);
         break;
     case DisplayType::USING_D3D9:
-        mediaDisplay = new MediaDisplay_Directx(mainCtrl);
+        mediaDisplay = new MediaDisplay_D3D9(mainCtrl);
         break;
     case DisplayType::USING_D3D11:
         mediaDisplay = new MediaDisplayD3D11(mainCtrl);

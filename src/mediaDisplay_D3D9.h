@@ -1,5 +1,5 @@
-#ifndef MediaDisplay_Directx_H
-#define MediaDisplay_Directx_H
+#ifndef MediaDisplay_D3D9_H
+#define MediaDisplay_D3D9_H
 
 #include <memory>
 #include <mutex>
@@ -34,10 +34,10 @@ typedef struct videoBufferForDirectX
 //    int bytesPerSec = 0;
 //}AudioBufferForXAudio;
 
-class MediaDisplay_Directx : public MediaDisplay
+class MediaDisplay_D3D9 : public MediaDisplay
 {
 public:
-    MediaDisplay_Directx(MediaMainControl *mainCtrl);
+    MediaDisplay_D3D9(MediaMainControl *mainCtrl);
 
     virtual bool init() override;
     virtual bool initVideoSetting(int width, int height, const char *title) override;
@@ -48,12 +48,12 @@ public:
 
     static void renderNextFrame(WPARAM);
 private:
-    MediaDisplay_Directx(MediaDisplay_Directx&) = delete;
-    ~MediaDisplay_Directx();
+    MediaDisplay_D3D9(MediaDisplay_D3D9&) = delete;
+    ~MediaDisplay_D3D9();
     bool initD3D(int, int);
     void getDelay();
-    static void renderControlThread(MediaDisplay_Directx*);
-    static void loadAudioDataThread(MediaDisplay_Directx*);
+    static void renderControlThread(MediaDisplay_D3D9*);
+    static void loadAudioDataThread(MediaDisplay_D3D9*);
 
 
 private:

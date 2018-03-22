@@ -1,4 +1,4 @@
-#include "mediaDisplay_DirectX.h"
+#include "mediaDisplay_D3D9.h"
 #include "util.h"
 
 
@@ -23,7 +23,7 @@ namespace
 
 static LRESULT WINAPI winProc(HWND hwnd, UINT msg, WPARAM wparma, LPARAM lparam);
 
-MediaDisplay_Directx::MediaDisplay_Directx(MediaMainControl *mainCtrl)
+MediaDisplay_D3D9::MediaDisplay_D3D9(MediaMainControl *mainCtrl)
     :MediaDisplay(mainCtrl)
     , m_direct3D9(nullptr, [](IDirect3D9 *p) {p->Release(); })
     , m_direct3DDevice(nullptr, [](IDirect3DDevice9 *p) {p->Release(); })
@@ -34,11 +34,11 @@ MediaDisplay_Directx::MediaDisplay_Directx(MediaMainControl *mainCtrl)
     InitializeCriticalSection(&m_critial);
 }
 
-MediaDisplay_Directx::~MediaDisplay_Directx()
+MediaDisplay_D3D9::~MediaDisplay_D3D9()
 {
 }
 
-bool MediaDisplay_Directx::init()
+bool MediaDisplay_D3D9::init()
 {
     WNDCLASSEX wc;
     ZeroMemory(&wc, sizeof(wc));
@@ -56,7 +56,7 @@ bool MediaDisplay_Directx::init()
     return true;
 }
 
-bool MediaDisplay_Directx::initD3D(int width, int height)
+bool MediaDisplay_D3D9::initD3D(int width, int height)
 {
     m_frameWidth = width;
     m_frameHeight = height;
@@ -205,7 +205,7 @@ bool MediaDisplay_Directx::initD3D(int width, int height)
     return true;
 }
 
-bool MediaDisplay_Directx::initVideoSetting(int width, int height, const char *title)
+bool MediaDisplay_D3D9::initVideoSetting(int width, int height, const char *title)
 {
     //initialize window
     wchar_t wTitle[1024];
@@ -225,7 +225,7 @@ bool MediaDisplay_Directx::initVideoSetting(int width, int height, const char *t
 }
 
 
-bool MediaDisplay_Directx::initAudioSetting(int freq, uint8_t wantedChannels, uint32_t wantedChannelLayout)
+bool MediaDisplay_D3D9::initAudioSetting(int freq, uint8_t wantedChannels, uint32_t wantedChannelLayout)
 {
     if (!m_audioPlay.isValid())
     {
@@ -267,7 +267,7 @@ bool MediaDisplay_Directx::initAudioSetting(int freq, uint8_t wantedChannels, ui
 }
 
 
-void MediaDisplay_Directx::exec()
+void MediaDisplay_D3D9::exec()
 {
     if (m_playState.videoDisplay && m_fps > 0)
     {
@@ -299,12 +299,12 @@ LRESULT WINAPI winProc(HWND hwnd, UINT msg, WPARAM wparma, LPARAM lparam)
         PostQuitMessage(0);
         return 0;
     case RENDER_NEXT_FRAME:
-        MediaDisplay_Directx::renderNextFrame(wparma);
+        MediaDisplay_D3D9::renderNextFrame(wparma);
     }
     return DefWindowProc(hwnd, msg, wparma, lparam);
 }
 
-void MediaDisplay_Directx::renderControlThread(MediaDisplay_Directx* p)
+void MediaDisplay_D3D9::renderControlThread(MediaDisplay_D3D9* p)
 {
     while (!p->m_playState.exit && !p->m_mainCtrl->isVideoFrameEmpty())
     {
@@ -315,7 +315,7 @@ void MediaDisplay_Directx::renderControlThread(MediaDisplay_Directx* p)
     }
 }
 
-void MediaDisplay_Directx::loadAudioDataThread(MediaDisplay_Directx* p)
+void MediaDisplay_D3D9::loadAudioDataThread(MediaDisplay_D3D9* p)
 {
     int PCMBufferSize = p->m_audioBufferSizePerDeliver * 4;
     uint8_t *PCMBuffer = (uint8_t *)av_malloc(PCMBufferSize);
@@ -347,9 +347,9 @@ void MediaDisplay_Directx::loadAudioDataThread(MediaDisplay_Directx* p)
     av_free(PCMBuffer);
 }
 
-void MediaDisplay_Directx::renderNextFrame(WPARAM wp)
+void MediaDisplay_D3D9::renderNextFrame(WPARAM wp)
 {
-    MediaDisplay_Directx *p = reinterpret_cast<MediaDisplay_Directx*>(wp);
+    MediaDisplay_D3D9 *p = reinterpret_cast<MediaDisplay_D3D9*>(wp);
     LRESULT lRet;
 
     if (p->m_videoBuffer.data[0] == nullptr)
@@ -400,7 +400,7 @@ void MediaDisplay_Directx::renderNextFrame(WPARAM wp)
     p->m_direct3DDevice->Present(NULL, NULL, NULL, NULL);
 }
 
-void MediaDisplay_Directx::getDelay()
+void MediaDisplay_D3D9::getDelay()
 {
     int currentAudioTime = m_audioPlay.getDuration(); //more precisely
 
