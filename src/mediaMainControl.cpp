@@ -16,6 +16,7 @@ extern "C"
 #include "util.h"
 #include "dxva2Wrapper.h"
 #include "mediaDisplay.h"
+#include "mediaDisplay_D3D9.h"
 
 namespace
 {
@@ -115,10 +116,14 @@ void MediaMainControl::setVideoDecoder()
     else
     {
         m_mediaDisplay = MediaDisplay::createDisplayInstance(this, DisplayType::USING_D3D9); //create window
+        if (m_mediaDisplay == nullptr)
+            return;
         if (m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate.den != NULL && m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate.num != NULL)
             m_fps = av_q2d(m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate);
         m_videoCodecCtx = avcodec_alloc_context3(m_videoCodec);
         avcodec_parameters_to_context(m_videoCodecCtx, m_formatCtx->streams[m_videoStreamIndex]->codecpar);
+        m_frameWidth = m_videoCodecCtx->coded_width;
+        m_frameHeight = m_videoCodecCtx->coded_height;
         bool isAccelSupport = true;
         AVCodecContext *tempCodecCtx = m_videoCodecCtx;
         memcpy(tempCodecCtx, m_videoCodecCtx, sizeof(m_videoCodecCtx));
@@ -132,7 +137,7 @@ void MediaMainControl::setVideoDecoder()
         case AV_CODEC_ID_VP9:
         {
             m_videoCodecCtx->thread_count = 1;
-            Dxva2Wrapper *m_dxva2Wrapper = new Dxva2Wrapper(m_videoCodec, m_videoCodecCtx);
+            Dxva2Wrapper *m_dxva2Wrapper = new Dxva2Wrapper(m_videoCodec, m_videoCodecCtx, dynamic_cast<MediaDisplay_D3D9*>(m_mediaDisplay));
             m_videoCodecCtx->opaque = m_dxva2Wrapper;
             //create window
            

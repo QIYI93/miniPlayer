@@ -6,9 +6,8 @@
 #include <windows.h>
 #include <xaudio2.h>
 #include <d3d9.h>
-#include "util/ComPtr.hpp"
 #include "XAudioPlay.h"
-#include "dxva2Wrapper.h"
+
 #include "mediaDisplay.h"
 
 typedef struct
@@ -37,7 +36,6 @@ typedef struct videoBufferForDirectX
 
 class MediaDisplay_D3D9 : public MediaDisplay
 {
-    friend class Dxva2Wrapper;
 public:
     MediaDisplay_D3D9(MediaMainControl *mainCtrl);
 
@@ -48,20 +46,39 @@ public:
     virtual void exec() override;
     virtual HWND getWinHandle() { return m_mainWnd; }
 
+    static void renderNextFrame(WPARAM);
 private:
     MediaDisplay_D3D9(MediaDisplay_D3D9&) = delete;
     ~MediaDisplay_D3D9();
+    bool initD3D(int, int);
+    void getDelay();
+    static void renderControlThread(MediaDisplay_D3D9*);
+    static void loadAudioDataThread(MediaDisplay_D3D9*);
 
-    bool initD3D();
 
 private:
     HWND m_mainWnd = NULL;
     CRITICAL_SECTION  m_critial;
-    D3DDISPLAYMODE m_displayMode;
-    D3DPRESENT_PARAMETERS m_d3dpp = { 0 };
+    D3DDISPLAYMODE m_d3dDisplayMode;
+    D3DCAPS9 m_d3dcaps;
+    int m_supportHardwareVP = 0;;
 
-    ComPtr<IDirect3D9> m_d3d9;
-    ComPtr<IDirect3DDevice9> m_device;
+    std::unique_ptr<IDirect3D9, void(*)(IDirect3D9 *p)> m_direct3D9;
+    std::unique_ptr<IDirect3DDevice9, void(*)(IDirect3DDevice9*)> m_direct3DDevice;
+    std::unique_ptr<IDirect3DTexture9, void(*)(IDirect3DTexture9*)> m_direct3DTexture;
+    std::unique_ptr<IDirect3DVertexBuffer9, void(*)(IDirect3DVertexBuffer9*)> m_direct3DVertexBuffer;
+
+    std::thread m_renderControlThread;
+    std::thread m_loadAudioControlThread;
+
+    videoBufferForDirectX m_videoBuffer;
+    XAudioPlay m_audioPlay;
+    int m_audioBufferSamples = 0;
+    int m_audioBufferSizePerDeliver;
+    //bool m_quit = false;
+
+    int m_frameWidth = 0;
+    int m_frameHeight = 0;
 };
 
 #endif

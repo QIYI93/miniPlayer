@@ -9,8 +9,6 @@
 #include "mediaDisply_D3D11.h"
 //#include "mediaDisplay_OpenGL.h"
 
-
-
 MediaDisplay::MediaDisplay(MediaMainControl* mainCtrl)
     :m_mainCtrl(mainCtrl)
 {
