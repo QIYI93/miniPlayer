@@ -30,6 +30,8 @@ else()
     message(FATAL_ERROR "unknown msvc version ...")
 endif()
 
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake")
+
 if(MSVC AND NOT EXISTS "${CMAKE_BINARY_DIR}/ALL_BUILD.vcxproj.user")
 	file(GENERATE
 		OUTPUT "${CMAKE_BINARY_DIR}/ALL_BUILD.vcxproj.user"
@@ -93,11 +95,12 @@ add_executable(miniplayer WIN32
 	${DXGI_SRC}
     )
 
-if(WIN32)
+#sdl
 target_link_libraries(miniplayer 
 SDL2.lib 
 SDL2main.lib)
 
+#ffmpeg
 target_link_libraries(miniplayer
 avdevice.lib 
 avcodec.lib 
@@ -108,10 +111,10 @@ postproc.lib
 swresample.lib 
 swscale.lib)
 
-target_link_libraries(miniplayer
-d3d9.lib
-xaudio2.lib)
-endif()
+#target_link_libraries(miniplayer
+#d3d9.lib
+#xaudio2.lib)
+#endif()
 
 if(MSVC)
 set_target_properties(miniplayer PROPERTIES LINK_FLAGS_DEBUG "/SUBSYSTEM:CONSOLE")
@@ -132,3 +135,5 @@ add_custom_command(
     -P "${CMAKE_SOURCE_DIR}/cmake/postbuild_copy_helper.cmake"
     VERBATIM
     )
+	
+include(CopyDeps)

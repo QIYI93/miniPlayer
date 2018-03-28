@@ -1,7 +1,6 @@
 #include "mediaDisplay_D3D9.h"
 #include "util.h"
 
-
 extern "C"
 {
 //#include <libavformat/avformat.h>
@@ -9,6 +8,8 @@ extern "C"
 #include <libavutil/imgutils.h>
 #include <libswresample/swresample.h>
 }
+
+#pragma comment(lib,"d3d9.lib")
 
 #define RENDER_NEXT_FRAME (WM_USER + 0x100)
 #define CLOSE_WINDOW (WM_USER + 0x101)

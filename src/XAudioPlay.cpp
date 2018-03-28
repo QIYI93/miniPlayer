@@ -1,6 +1,8 @@
 #include "xaudioplay.h"
 #include "util.h"
 
+#pragma comment(lib,"xaudio2.lib")
+
 VoiceCallBack::VoiceCallBack()
     :m_hBufferEndEvent(CreateEvent(NULL, FALSE, FALSE, NULL))
     ,m_count(NULL)
