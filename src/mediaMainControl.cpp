@@ -120,10 +120,11 @@ void MediaMainControl::setVideoDecoder()
             return;
         if (m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate.den != NULL && m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate.num != NULL)
             m_fps = av_q2d(m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate);
+        //m_videoCodecCtx = m_formatCtx->streams[m_videoStreamIndex]->codec;
         m_videoCodecCtx = avcodec_alloc_context3(m_videoCodec);
         avcodec_parameters_to_context(m_videoCodecCtx, m_formatCtx->streams[m_videoStreamIndex]->codecpar);
-        m_frameWidth = m_videoCodecCtx->coded_width;
-        m_frameHeight = m_videoCodecCtx->coded_height;
+        m_frameWidth = m_videoCodecCtx->width;
+        m_frameHeight = m_videoCodecCtx->height;
         bool isAccelSupport = true;
         AVCodecContext *tempCodecCtx = m_videoCodecCtx;
         memcpy(tempCodecCtx, m_videoCodecCtx, sizeof(m_videoCodecCtx));
@@ -139,13 +140,13 @@ void MediaMainControl::setVideoDecoder()
             m_videoCodecCtx->thread_count = 1;
             Dxva2Wrapper *m_dxva2Wrapper = new Dxva2Wrapper(m_videoCodec, m_videoCodecCtx, dynamic_cast<MediaDisplay_D3D9*>(m_mediaDisplay));
             m_videoCodecCtx->opaque = m_dxva2Wrapper;
-            //create window
-           
+            m_videoCodecCtx->coded_width = m_videoCodecCtx->width;
+            m_videoCodecCtx->coded_height = m_videoCodecCtx->height;
             if (m_dxva2Wrapper->init(m_mediaDisplay->getWinHandle()) == 0)
             {
-                //codecctx->get_buffer2 = ist->hwaccel_get_buffer;
-                //codecctx->get_format = GetHwFormat;
-                //codecctx->thread_safe_callbacks = 1;
+                m_videoCodecCtx->get_buffer2 = Dxva2Wrapper::dxva2GetBuffer;
+                m_videoCodecCtx->get_format = Dxva2Wrapper::GetHwFormat;
+                m_videoCodecCtx->thread_safe_callbacks = 1;
                 break;
             }
         }

@@ -7,6 +7,11 @@
 #include <dxva2api.h>
 #include "util/ComPtr.hpp"
 
+extern "C"
+{
+#include "libavutil/pixfmt.h"
+}
+
 enum class HWAccelID : int{
     HWACCEL_NONE = 0,
     HWACCEL_AUTO,
@@ -16,46 +21,46 @@ enum class HWAccelID : int{
     HWACCEL_VIDEOTOOLBOX,
     HWACCEL_QSV,
 };
-
-typedef struct surface_info
-{
-    int used;
-    uint64_t age;
-} surface_info;
-
-class AVFrame;
-typedef struct DXVA2Context
-{
-    //IDirect3D9                  *d3d9;
-    //IDirect3DDevice9            *d3d9device;
-    //IDirect3DDeviceManager9     *d3d9devmgr;
-    //IDirectXVideoDecoderService *decoder_service;
-    //IDirectXVideoDecoder        *decoder;
-
-    //GUID                        decoder_guid;
-    //DXVA2_ConfigPictureDecode   decoder_config;
-
-    //LPDIRECT3DSURFACE9          *surfaces;
-    //surface_info                *surface_infos;
-    //uint32_t                    num_surfaces;
-    //uint64_t                    surface_age;
-
-    AVFrame                     *tmp_frame;
-} DXVA2Context;
-
 class AVCodec;
 class AVCodecContext;
 class MediaDisplay_D3D9;
+class d3d_format_t;
+class AVFrame;
+class SurfaceInfo;
+typedef struct DXVA2Context
+{
+    LPDIRECT3DSURFACE9  *surfaces;
+    SurfaceInfo         *surfaceInfos;
+    uint32_t            numSurfaces;
+    uint64_t            surfaceAge;
+    AVFrame             *tmp_frame;
+} DXVA2Context;
+
+typedef struct DXVA2SurfaceWrapper {
+    DXVA2Context         *ctx;
+    LPDIRECT3DSURFACE9   surface;
+    IDirectXVideoDecoder *decoder;
+} DXVA2SurfaceWrapper;
+
 class Dxva2Wrapper
 {
 public:
     explicit Dxva2Wrapper(AVCodec* ,AVCodecContext*, MediaDisplay_D3D9*);
     ~Dxva2Wrapper();
     bool init(HWND);
+public:
 
+    static int dxva2GetBuffer(AVCodecContext*, AVFrame*, int);
+    static AVPixelFormat GetHwFormat(AVCodecContext*, const AVPixelFormat*);
+private:
+    bool createDXVA2Decoder();
+    void DXVA2DestroyDecoder();
+    const d3d_format_t *d3dFindFormat(D3DFORMAT);
+    bool DXVA2GetDecoderConfiguration(const GUID *, const DXVA2_VideoDesc *, DXVA2_ConfigPictureDecode *);
 private:
     HWAccelID m_hwAccelId = HWAccelID::HWACCEL_AUTO;
     HWAccelID m_activeHwAccelId = HWAccelID::HWACCEL_AUTO;
+    AVPixelFormat m_hwAccelPixFmt;
     char * m_hwAccelDevice = "dxva2";
 
     MediaDisplay_D3D9* m_mediaPlayer = nullptr;
@@ -65,9 +70,14 @@ private:
 
     ComPtr<IDirect3DDeviceManager9> m_deviceManager;
     ComPtr<IDirectXVideoDecoderService>m_decoderService;
+    ComPtr<IDirectXVideoDecoder> m_DXVAdecoder;
+    GUID m_decodeGuid = GUID_NULL;
+    DXVA2_ConfigPictureDecode m_decodeConfig;
+
     unsigned m_resetToken = 0;
     HANDLE m_deviceHandle;
-    DXVA2Context m_dxva2Context = { 0 };
+    DXVA2Context *m_DXVA2Context = nullptr;
+
 };
 
 

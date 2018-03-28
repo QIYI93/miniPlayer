@@ -61,8 +61,8 @@ bool MediaDisplay_D3D9::initD3D()
     m_d3d9 = Direct3DCreate9(D3D_SDK_VERSION);
     if(m_d3d9 == nullptr)
         return false;
-
-    m_d3d9->GetAdapterDisplayMode(NULL, &m_displayMode);
+    UINT adapter = D3DADAPTER_DEFAULT;
+    m_d3d9->GetAdapterDisplayMode(adapter, &m_displayMode);
     m_d3dpp.Windowed = true;
     m_d3dpp.BackBufferCount = 0;
     m_d3dpp.hDeviceWindow = m_mainWnd;
@@ -83,7 +83,7 @@ bool MediaDisplay_D3D9::initD3D()
         else
             behaviorFlags = D3DCREATE_FPU_PRESERVE | D3DCREATE_SOFTWARE_VERTEXPROCESSING | D3DCREATE_MULTITHREADED;
     }
-    ret = m_d3d9->CreateDevice(NULL, D3DDEVTYPE_HAL, m_mainWnd, behaviorFlags, &m_d3dpp, &m_device);
+    ret = m_d3d9->CreateDevice(adapter, D3DDEVTYPE_HAL, m_mainWnd, behaviorFlags, &m_d3dpp, &m_device);
     if (FAILED(ret))
     {
         msgOutput(MsgType::MSG_ERROR, "Failed to create d3d device.");
