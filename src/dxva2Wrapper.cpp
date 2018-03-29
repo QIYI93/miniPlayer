@@ -23,8 +23,18 @@ Dxva2Wrapper::Dxva2Wrapper(AVCodec* avCodec,AVCodecContext* avCodecCtx,MediaDisp
 
 Dxva2Wrapper::~Dxva2Wrapper()
 {
-}
+    DXVA2DestroyDecoder();
 
+    if (m_deviceManager && m_deviceManager != INVALID_HANDLE_VALUE)
+        m_deviceManager->CloseDeviceHandle(m_deviceHandle);
+
+    if (m_DXVA2Context)
+    {
+        av_frame_free(&m_DXVA2Context->tmp_frame);
+        av_free(m_DXVA2Context);
+    }
+
+}
 
 static void dxva2ReleaseBuffer(void *opaque, uint8_t *data)
 {
@@ -285,7 +295,7 @@ bool Dxva2Wrapper::createDXVA2Decoder()
     if (IsEqualGUID(m_decodeGuid, DXVADDI_Intel_ModeH264_E))
         dxvaCtx->workaround |= FF_DXVA2_WORKAROUND_INTEL_CLEARVIDEO;
 
-    return 0;
+    return true;
 }
 
 bool Dxva2Wrapper::DXVA2GetDecoderConfiguration(const GUID *device_guid, const DXVA2_VideoDesc *desc, DXVA2_ConfigPictureDecode *config)
@@ -334,19 +344,21 @@ bool Dxva2Wrapper::DXVA2GetDecoderConfiguration(const GUID *device_guid, const D
 
 void Dxva2Wrapper::DXVA2DestroyDecoder()
 {
-    if (m_DXVA2Context->surfaces)
+    if (m_DXVA2Context != nullptr)
     {
-        for (int i = 0; i < m_DXVA2Context->numSurfaces; i++)
+        if (m_DXVA2Context->surfaces)
         {
-            if (m_DXVA2Context->surfaces[i])
-                IDirect3DSurface9_Release(m_DXVA2Context->surfaces[i]);
+            for (int i = 0; i < m_DXVA2Context->numSurfaces; i++)
+            {
+                if (m_DXVA2Context->surfaces[i])
+                    IDirect3DSurface9_Release(m_DXVA2Context->surfaces[i]);
+            }
         }
+        av_freep(&m_DXVA2Context->surfaces);
+        av_freep(&m_DXVA2Context->surfaceInfos);
+        m_DXVA2Context->numSurfaces = 0;
+        m_DXVA2Context->surfaceAge = 0;
     }
-    av_freep(&m_DXVA2Context->surfaces);
-    av_freep(&m_DXVA2Context->surfaceInfos);
-    m_DXVA2Context->numSurfaces = 0;
-    m_DXVA2Context->surfaceAge = 0;
-
     if (m_DXVAdecoder)
     {
         m_DXVAdecoder.Clear();

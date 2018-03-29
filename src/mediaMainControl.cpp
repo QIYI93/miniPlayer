@@ -25,7 +25,7 @@ namespace
     auto const maxAudioPktQueueSize = 50;
     auto const maxVideoPktQueueSize = 20;
     auto const maxAudioFrameQueueSize = 100;
-    auto const maxVideoFrameQueueSize = 20;
+    auto const maxVideoFrameQueueSize = 15;
 
     auto const waitTime = 5;
 }
@@ -80,100 +80,114 @@ bool MediaMainControl::openFile(const char *file)
     m_audioStreamIndex = av_find_best_stream(m_formatCtx, AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, NULL);
 
     //Open video and audio codec and create codec context
+    ret = true;
     if(m_videoStreamIndex >= 0)
-        setVideoDecoder();
+        ret &= setVideoDecoder();
 
     if (m_audioStreamIndex >= 0)
-        m_audioCodec = avcodec_find_decoder(m_formatCtx->streams[m_audioStreamIndex]->codecpar->codec_id);
-    if (m_audioCodec == nullptr)
-    {
-        av_log(nullptr, AV_LOG_ERROR, "Not found audio decoder.");
-    }
-    else
-    {
-        m_audioCodecCtx = avcodec_alloc_context3(m_audioCodec);
-        avcodec_parameters_to_context(m_audioCodecCtx, m_formatCtx->streams[m_audioStreamIndex]->codecpar);
-        ret = avcodec_open2(m_audioCodecCtx, m_audioCodec, nullptr);
-        if (ret != 0)
-        {
-            av_strerror(ret, m_errMsgBuffer, errMsgBufferSize);
-            av_log(nullptr, AV_LOG_ERROR, m_errMsgBuffer);
-        }
-    }
+        ret &= setAudioDecoder();
+
+    if (ret != TRUE)
+        return false;
+
     m_file = file;
     return true;
 }
 
-void MediaMainControl::setVideoDecoder()
+bool MediaMainControl::setAudioDecoder()
+{
+    m_audioCodec = avcodec_find_decoder(m_formatCtx->streams[m_audioStreamIndex]->codecpar->codec_id);
+    int ret;
+    if (m_audioCodec == nullptr)
+    {
+        av_log(nullptr, AV_LOG_ERROR, "Not found audio decoder.");
+        return false;
+    }
+
+    m_audioCodecCtx = avcodec_alloc_context3(m_audioCodec);
+    avcodec_parameters_to_context(m_audioCodecCtx, m_formatCtx->streams[m_audioStreamIndex]->codecpar);
+    ret = avcodec_open2(m_audioCodecCtx, m_audioCodec, nullptr);
+    if (ret != 0)
+    {
+        av_strerror(ret, m_errMsgBuffer, errMsgBufferSize);
+        av_log(nullptr, AV_LOG_ERROR, m_errMsgBuffer);
+        return false;
+    }
+    return true;
+}
+bool MediaMainControl::setVideoDecoder()
 {
     m_videoCodec = avcodec_find_decoder(m_formatCtx->streams[m_videoStreamIndex]->codecpar->codec_id);
 
     if (m_videoCodec == nullptr)
     {
         av_log(nullptr, AV_LOG_ERROR, "Not found video decoder.");
-        return;
+        return false;
     }
-    else
+    m_mediaDisplay = MediaDisplay::createDisplayInstance(this, DisplayType::USING_D3D9); //create window
+    if (m_mediaDisplay == nullptr)
+        return false;
+    if (m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate.den != NULL && m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate.num != NULL)
+        m_fps = av_q2d(m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate);
+    //m_videoCodecCtx = m_formatCtx->streams[m_videoStreamIndex]->codec;
+    m_videoCodecCtx = avcodec_alloc_context3(m_videoCodec);
+    avcodec_parameters_to_context(m_videoCodecCtx, m_formatCtx->streams[m_videoStreamIndex]->codecpar);
+    m_frameWidth = m_videoCodecCtx->width;
+    m_frameHeight = m_videoCodecCtx->height;
+    AVCodecContext *tempCodecCtx = m_videoCodecCtx;
+    memcpy(tempCodecCtx, m_videoCodecCtx, sizeof(m_videoCodecCtx));
+    switch (m_videoCodec->id)
     {
-        m_mediaDisplay = MediaDisplay::createDisplayInstance(this, DisplayType::USING_D3D9); //create window
-        if (m_mediaDisplay == nullptr)
-            return;
-        if (m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate.den != NULL && m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate.num != NULL)
-            m_fps = av_q2d(m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate);
-        //m_videoCodecCtx = m_formatCtx->streams[m_videoStreamIndex]->codec;
-        m_videoCodecCtx = avcodec_alloc_context3(m_videoCodec);
-        avcodec_parameters_to_context(m_videoCodecCtx, m_formatCtx->streams[m_videoStreamIndex]->codecpar);
-        m_frameWidth = m_videoCodecCtx->width;
-        m_frameHeight = m_videoCodecCtx->height;
-        bool isAccelSupport = true;
-        AVCodecContext *tempCodecCtx = m_videoCodecCtx;
-        memcpy(tempCodecCtx, m_videoCodecCtx, sizeof(m_videoCodecCtx));
-        switch (m_videoCodec->id)
+    case AV_CODEC_ID_MPEG2VIDEO:
+    case AV_CODEC_ID_H264:
+    case AV_CODEC_ID_VC1:
+    case AV_CODEC_ID_WMV3:
+    case AV_CODEC_ID_HEVC:
+    case AV_CODEC_ID_VP9:
+    {
+        m_videoCodecCtx->thread_count = 1;
+        Dxva2Wrapper *m_dxva2Wrapper = new Dxva2Wrapper(m_videoCodec, m_videoCodecCtx, dynamic_cast<MediaDisplay_D3D9*>(m_mediaDisplay));
+        m_videoCodecCtx->coded_width = m_videoCodecCtx->width;
+        m_videoCodecCtx->coded_height = m_videoCodecCtx->height;
+        if (m_dxva2Wrapper->init(m_mediaDisplay->getWinHandle()))
         {
-        case AV_CODEC_ID_MPEG2VIDEO:
-        case AV_CODEC_ID_H264:
-        case AV_CODEC_ID_VC1:
-        case AV_CODEC_ID_WMV3:
-        case AV_CODEC_ID_HEVC:
-        case AV_CODEC_ID_VP9:
-        {
-            m_videoCodecCtx->thread_count = 1;
-            Dxva2Wrapper *m_dxva2Wrapper = new Dxva2Wrapper(m_videoCodec, m_videoCodecCtx, dynamic_cast<MediaDisplay_D3D9*>(m_mediaDisplay));
             m_videoCodecCtx->opaque = m_dxva2Wrapper;
-            m_videoCodecCtx->coded_width = m_videoCodecCtx->width;
-            m_videoCodecCtx->coded_height = m_videoCodecCtx->height;
-            if (m_dxva2Wrapper->init(m_mediaDisplay->getWinHandle()) == 0)
-            {
-                m_videoCodecCtx->get_buffer2 = Dxva2Wrapper::dxva2GetBuffer;
-                m_videoCodecCtx->get_format = Dxva2Wrapper::GetHwFormat;
-                m_videoCodecCtx->thread_safe_callbacks = 1;
-                break;
-            }
+            m_videoCodecCtx->get_buffer2 = Dxva2Wrapper::dxva2GetBuffer;
+            m_videoCodecCtx->get_format = Dxva2Wrapper::GetHwFormat;
+            m_videoCodecCtx->thread_safe_callbacks = 1;
+            break;
         }
+        else
+        {
+            delete m_dxva2Wrapper;
+            m_isAccelSupport = false;
+            break;
         }
-
-
-
-
-
-        ///////////////////////multi-thread setting//////////////////////////
-        //m_videoCodecCtx->thread_count = util::getNoOfProcessors();
-        //m_videoCodecCtx->thread_type = FF_THREAD_FRAME;
-        ///////////////////////////////////////////////////////////////////
-        //if (m_videoCodecCtx->codec->capabilities & CODEC_CAP_TRUNCATED)
-        //    m_videoCodecCtx->flags |= CODEC_FLAG_TRUNCATED;
-
-        //int ret = avcodec_open2(m_videoCodecCtx, m_videoCodec, nullptr);
-        //if (ret != 0)
-        //{
-        //    av_strerror(ret, m_errMsgBuffer, errMsgBufferSize);
-        //    av_log(nullptr, AV_LOG_ERROR, m_errMsgBuffer);
-        //    return;
-        //}
-
-        //m_frameWidth = m_videoCodecCtx->coded_width;
-        //m_frameHeight = m_videoCodecCtx->coded_height;
     }
+    default:
+    {
+        m_isAccelSupport = false;
+        break;
+    }
+    }
+    if (m_isAccelSupport == false)
+    {
+        av_free(m_videoCodecCtx);
+        m_videoCodecCtx = tempCodecCtx;
+        m_videoCodecCtx->thread_count = util::getNoOfProcessors();
+        m_videoCodecCtx->thread_type = FF_THREAD_FRAME;
+        if (m_videoCodecCtx->codec->capabilities & CODEC_CAP_TRUNCATED)
+            m_videoCodecCtx->flags |= CODEC_FLAG_TRUNCATED;
+    }
+
+    int ret = avcodec_open2(m_videoCodecCtx, m_videoCodec, nullptr);
+    if (ret != 0)
+    {
+        av_strerror(ret, m_errMsgBuffer, errMsgBufferSize);
+        av_log(nullptr, AV_LOG_ERROR, m_errMsgBuffer);
+        return false;
+    }
+    return true;
 }
 
 void MediaMainControl::closeFile()
@@ -326,7 +340,7 @@ void MediaMainControl::initDecodePktThread(void *mainCtrl)
             {
                 while (avcodec_receive_frame(mainCtl->m_audioCodecCtx, frame) == NULL)
                 {
-                    mainCtl->m_audioFrameQueue->enQueue(frame);
+                    //mainCtl->m_audioFrameQueue->enQueue(frame);
                     av_frame_unref(frame);
                 }
             }
@@ -339,6 +353,24 @@ void MediaMainControl::initDecodePktThread(void *mainCtrl)
     MediaMainControl *mainCtl = static_cast<MediaMainControl*>(mainCtrl);
     mainCtl->m_decodeAudioThread = std::thread(decodeAudioPktFun, mainCtrl);
     mainCtl->m_decodeVideoThread = std::thread(decodeVideoPktFun, mainCtrl);
+}
+
+IDirect3DSurface9* MediaMainControl::getSurface(int32_t *pts)
+{
+    av_frame_unref(m_videoFrameRaw);
+    IDirect3DSurface9 *surface = nullptr;
+    while (!m_videoFrameQueue->m_noMorePktToDecode && m_videoFrameQueue->m_queue.empty())
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(waitTime));
+    }
+    if (m_videoFrameQueue->m_queue.empty())
+        return false;
+
+    m_videoFrameQueue->deQueue(m_videoFrameRaw);
+    surface = (LPDIRECT3DSURFACE9)m_videoFrameRaw->data[3];
+    *pts = getVideoFramPts(m_videoFrameRaw);
+
+    return surface;
 }
 
 bool MediaMainControl::getGraphicData(GraphicDataType type, int width, int height, void *data, const uint32_t size, int *lineSize, int32_t *pts)
@@ -534,25 +566,21 @@ void MediaMainControl::play()
     initSeparatePktThread(this);
     initDecodePktThread(this);
 
-    MediaDisplay *mediaDisplay = MediaDisplay::createDisplayInstance(this, DisplayType::USING_SDL);
-    if (mediaDisplay == nullptr)
-    {
-        av_log(NULL, AV_LOG_ERROR, "Cannot create display instance!\n");
-        return;
-    }
+    //MediaDisplay *mediaDisplay = MediaDisplay::createDisplayInstance(this, DisplayType::USING_SDL);
+
     if (m_videoStreamIndex >= 0)
     {
-        mediaDisplay->initVideoSetting(m_frameWidth, m_frameHeight, m_file.c_str());
-        mediaDisplay->setVideoTimeBase(m_formatCtx->streams[m_videoStreamIndex]->time_base.num, m_formatCtx->streams[m_videoStreamIndex]->time_base.den);
-        mediaDisplay->setFps(m_fps);
+        m_mediaDisplay->initVideoSetting(m_frameWidth, m_frameHeight, m_file.c_str());
+        m_mediaDisplay->setVideoTimeBase(m_formatCtx->streams[m_videoStreamIndex]->time_base.num, m_formatCtx->streams[m_videoStreamIndex]->time_base.den);
+        m_mediaDisplay->setFps(m_fps);
     }
-    if (m_audioStreamIndex >= 0)
-    {
-        mediaDisplay->initAudioSetting(m_audioCodecCtx->sample_rate, m_audioCodecCtx->channels, m_audioCodecCtx->channel_layout);
-        mediaDisplay->setAudioTimeBase(m_formatCtx->streams[m_audioStreamIndex]->time_base.num, m_formatCtx->streams[m_audioStreamIndex]->time_base.den);
-    }
-    mediaDisplay->exec();
-    MediaDisplay::destroyDisplayInstance(mediaDisplay);
+    //if (m_audioStreamIndex >= 0)
+    //{
+    //    mediaDisplay->initAudioSetting(m_audioCodecCtx->sample_rate, m_audioCodecCtx->channels, m_audioCodecCtx->channel_layout);
+    //    mediaDisplay->setAudioTimeBase(m_formatCtx->streams[m_audioStreamIndex]->time_base.num, m_formatCtx->streams[m_audioStreamIndex]->time_base.den);
+    //}
+    m_mediaDisplay->exec();
+    MediaDisplay::destroyDisplayInstance(m_mediaDisplay);
 
 }
 

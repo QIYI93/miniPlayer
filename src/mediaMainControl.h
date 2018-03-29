@@ -33,6 +33,7 @@ class MediaDisplay;
 class AVFormatContext;
 class AVCodecContext;
 class SwrContext;
+class IDirect3DSurface9;
 class MediaMainControl
 {
 public:
@@ -49,6 +50,7 @@ public:
     int32_t getDurationTime() { return m_totalTimeMS; }
 
     bool getGraphicData(GraphicDataType type, int width, int height, void *data, const uint32_t size, int *lineSize, int32_t *pts);
+    IDirect3DSurface9* getSurface(int32_t *pts); //only use in DXVA mode
     bool getPCMData(void *data, const uint32_t size, const AudioParams para, int32_t *pts, int32_t *outLen);
 
     bool isAudioFrameEmpty() { return m_audioFrameQueue->m_noMorePktToDecode && m_audioFrameQueue->m_queue.empty(); }
@@ -65,7 +67,8 @@ private:
 
     int getVideoStreamIndex() { return m_videoStreamIndex; }
     int getAudioStreamIndex() { return m_audioStreamIndex; }
-    void setVideoDecoder();
+    bool setVideoDecoder();
+    bool setAudioDecoder();
     int32_t getVideoFramPts(AVFrame *pframe);
     int32_t getAudioFramPts(AVFrame *pframe);
 
@@ -110,6 +113,7 @@ private:
     std::thread m_decodeVideoThread;
     std::thread m_decodeAudioThread;
 
+    bool m_isAccelSupport = true;
 };
 
 #endif

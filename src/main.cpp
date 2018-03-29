@@ -18,7 +18,7 @@ int main(int argc, char * argv[])
     MediaMainControl ctrl;
     if (ctrl.openFile(file))
     {
-        //ctrl.play();
+        ctrl.play();
         //ctrl.closeFile();
     }
 

@@ -66,7 +66,6 @@ private:
     MediaDisplay_D3D9* m_mediaPlayer = nullptr;
     AVCodec *m_avCodec = nullptr;
     AVCodecContext *m_avCodecCtx = nullptr;
-    void  *m_hwAccelCtx = nullptr;
 
     ComPtr<IDirect3DDeviceManager9> m_deviceManager;
     ComPtr<IDirectXVideoDecoderService>m_decoderService;

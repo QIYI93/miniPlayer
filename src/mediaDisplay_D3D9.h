@@ -48,11 +48,16 @@ public:
     virtual void exec() override;
     virtual HWND getWinHandle() { return m_mainWnd; }
 
+    static void renderNextFrame(WPARAM);
+
 private:
     MediaDisplay_D3D9(MediaDisplay_D3D9&) = delete;
     ~MediaDisplay_D3D9();
-
     bool initD3D();
+    void getDelay();
+    static void renderControlThread(MediaDisplay_D3D9*);
+    static void loadAudioDataThread(MediaDisplay_D3D9*);
+
 
 private:
     HWND m_mainWnd = NULL;
@@ -62,6 +67,11 @@ private:
 
     ComPtr<IDirect3D9> m_d3d9;
     ComPtr<IDirect3DDevice9> m_device;
+    ComPtr<IDirect3DSurface9>m_direct3DSurfaceRender;
+    IDirect3DSurface9 * m_pBackBuffer = nullptr;
+
+    std::thread m_renderControlThread;
+    std::thread m_loadAudioControlThread;
 };
 
 #endif
