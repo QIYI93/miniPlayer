@@ -28,8 +28,8 @@ typedef struct Timebase {
 
 typedef struct PlayState
 {
-    std::atomic<bool> pause = false;
-    std::atomic<bool> exit = false;
+    std::atomic_bool pause = false;
+    std::atomic_bool exit = false;
     int32_t delay;
     int32_t currentAudioTime = 0;
     int32_t currentVideoTime = 0;

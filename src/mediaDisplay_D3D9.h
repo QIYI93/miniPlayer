@@ -49,6 +49,8 @@ public:
     virtual HWND getWinHandle() { return m_mainWnd; }
 
     static void renderNextFrame(WPARAM);
+    static void setExitFlag();
+    static bool checkIsExitMsgLoop(WPARAM);
 
 private:
     MediaDisplay_D3D9(MediaDisplay_D3D9&) = delete;
@@ -75,6 +77,8 @@ private:
 
     std::thread m_renderControlThread;
     std::thread m_loadAudioControlThread;
+    std::atomic_bool m_renderControlThreadFinish = false;
+    std::atomic_bool m_loadAudioControlThreadFinish = false;
 };
 
 #endif

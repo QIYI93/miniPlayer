@@ -13,7 +13,7 @@ extern "C"
 #pragma comment(lib,"d3d9.lib")
 
 #define RENDER_NEXT_FRAME (WM_USER + 0x100)
-#define CLOSE_WINDOW (WM_USER + 0x101)
+#define CLOSE_WINDOW_CHECK (WM_USER + 0x101)
 #define LOAD_FRAME (WM_USER + 0x102)
 #define AUDIO_QUEUE_SIZE 3
 
@@ -21,6 +21,7 @@ namespace
 {
     auto const audioMinBufferSize = 512;
     auto const audioMaxCallBackPerSec = 30;
+    void *display = nullptr;
 }
 
 static LRESULT WINAPI winProc(HWND hwnd, UINT msg, WPARAM wparma, LPARAM lparam);
@@ -30,10 +31,12 @@ MediaDisplay_D3D9::MediaDisplay_D3D9(MediaMainControl *mainCtrl)
 {
     m_displayType = DisplayType::USING_D3D9;
     InitializeCriticalSection(&m_critial);
+    display = this;
 }
 
 MediaDisplay_D3D9::~MediaDisplay_D3D9()
 {
+    display = nullptr;
 }
 
 bool MediaDisplay_D3D9::init()
@@ -198,6 +201,8 @@ void MediaDisplay_D3D9::exec()
             DispatchMessage(&msg);
         }
     }
+    m_renderControlThread.join();
+    m_loadAudioControlThread.join();
 }
 
 void MediaDisplay_D3D9::renderControlThread(MediaDisplay_D3D9* p)
@@ -209,6 +214,8 @@ void MediaDisplay_D3D9::renderControlThread(MediaDisplay_D3D9* p)
         std::chrono::milliseconds dura(p->m_playState.delay);
         std::this_thread::sleep_for(dura);
     }
+    p->m_renderControlThreadFinish = true;
+    PostMessage(p->m_mainWnd, CLOSE_WINDOW_CHECK, WPARAM(p), NULL);
 }
 
 void MediaDisplay_D3D9::loadAudioDataThread(MediaDisplay_D3D9* p)
@@ -241,6 +248,14 @@ void MediaDisplay_D3D9::loadAudioDataThread(MediaDisplay_D3D9* p)
         pos = PCMBuffer + restLen;
     }
     av_free(PCMBuffer);
+    p->m_loadAudioControlThreadFinish = true;
+    PostMessage(p->m_mainWnd, CLOSE_WINDOW_CHECK, WPARAM(p), NULL);
+}
+
+bool MediaDisplay_D3D9::checkIsExitMsgLoop(WPARAM wp)
+{
+    MediaDisplay_D3D9 *p = reinterpret_cast<MediaDisplay_D3D9*>(wp);
+    return p->m_renderControlThreadFinish && p->m_loadAudioControlThreadFinish;
 }
 
 void MediaDisplay_D3D9::getDelay()
@@ -308,13 +323,27 @@ void MediaDisplay_D3D9::renderNextFrame(WPARAM wp)
     LeaveCriticalSection(&p->m_critial);
 }
 
+void MediaDisplay_D3D9::setExitFlag()
+{
+    MediaDisplay_D3D9 *p = reinterpret_cast<MediaDisplay_D3D9*>(display);
+    p->m_playState.exit = true;
+}
+
+
 LRESULT WINAPI winProc(HWND hwnd, UINT msg, WPARAM wparma, LPARAM lparam)
 {
     switch (msg)
     {
     case WM_DESTROY:
+        MediaDisplay_D3D9::setExitFlag();
         PostQuitMessage(0);
         return 0;
+    case CLOSE_WINDOW_CHECK:
+        if (MediaDisplay_D3D9::checkIsExitMsgLoop(wparma))
+        {
+            PostQuitMessage(0);
+            return 0;
+        }
     case RENDER_NEXT_FRAME:
         MediaDisplay_D3D9::renderNextFrame(wparma);
         break;

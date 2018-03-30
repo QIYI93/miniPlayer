@@ -146,12 +146,12 @@ bool MediaMainControl::setVideoDecoder()
     case AV_CODEC_ID_VP9:
     {
         m_videoCodecCtx->thread_count = 1;
-        Dxva2Wrapper *m_dxva2Wrapper = new Dxva2Wrapper(m_videoCodec, m_videoCodecCtx, dynamic_cast<MediaDisplay_D3D9*>(m_mediaDisplay));
+        m_dxva2Wrapper = std::make_unique<Dxva2Wrapper>(m_videoCodec, m_videoCodecCtx, dynamic_cast<MediaDisplay_D3D9*>(m_mediaDisplay));
         m_videoCodecCtx->coded_width = m_videoCodecCtx->width;
         m_videoCodecCtx->coded_height = m_videoCodecCtx->height;
         if (m_dxva2Wrapper->init(m_mediaDisplay->getWinHandle()))
         {
-            m_videoCodecCtx->opaque = m_dxva2Wrapper;
+            m_videoCodecCtx->opaque = m_dxva2Wrapper.get();
             m_videoCodecCtx->get_buffer2 = Dxva2Wrapper::dxva2GetBuffer;
             m_videoCodecCtx->get_format = Dxva2Wrapper::GetHwFormat;
             m_videoCodecCtx->thread_safe_callbacks = 1;
@@ -159,7 +159,7 @@ bool MediaMainControl::setVideoDecoder()
         }
         else
         {
-            delete m_dxva2Wrapper;
+            m_dxva2Wrapper.release();
             m_isAccelSupport = false;
             break;
         }

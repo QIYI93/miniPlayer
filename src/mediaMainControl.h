@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <mutex>
 #include <atomic>
+#include <memory>
 #include "pktAndFramequeue.h"
 
 
@@ -78,11 +79,11 @@ private:
     AVCodec *m_audioCodec = nullptr;
     AVCodecContext *m_videoCodecCtx = nullptr;
     AVCodecContext *m_audioCodecCtx = nullptr;
-    Dxva2Wrapper *m_dxva2Wrapper = nullptr;
     SwsContext *m_swsCtx = nullptr;
     SwrContext *m_swrCtx = nullptr;
 
     DecodeContext m_decode = { NULL };
+    std::unique_ptr<Dxva2Wrapper> m_dxva2Wrapper = nullptr;
 
     AVFrame* m_audioFrameRaw = nullptr;
     AVFrame* m_videoFrameRaw = nullptr;
