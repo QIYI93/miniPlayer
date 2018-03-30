@@ -68,7 +68,10 @@ private:
     ComPtr<IDirect3D9> m_d3d9;
     ComPtr<IDirect3DDevice9> m_device;
     ComPtr<IDirect3DSurface9>m_direct3DSurfaceRender;
-    IDirect3DSurface9 * m_pBackBuffer = nullptr;
+
+    XAudioPlay m_audioPlay;
+    int m_audioBufferSamples = 0;
+    int m_audioBufferSizePerDeliver;
 
     std::thread m_renderControlThread;
     std::thread m_loadAudioControlThread;

@@ -340,7 +340,7 @@ void MediaMainControl::initDecodePktThread(void *mainCtrl)
             {
                 while (avcodec_receive_frame(mainCtl->m_audioCodecCtx, frame) == NULL)
                 {
-                    //mainCtl->m_audioFrameQueue->enQueue(frame);
+                    mainCtl->m_audioFrameQueue->enQueue(frame);
                     av_frame_unref(frame);
                 }
             }
@@ -574,11 +574,11 @@ void MediaMainControl::play()
         m_mediaDisplay->setVideoTimeBase(m_formatCtx->streams[m_videoStreamIndex]->time_base.num, m_formatCtx->streams[m_videoStreamIndex]->time_base.den);
         m_mediaDisplay->setFps(m_fps);
     }
-    //if (m_audioStreamIndex >= 0)
-    //{
-    //    mediaDisplay->initAudioSetting(m_audioCodecCtx->sample_rate, m_audioCodecCtx->channels, m_audioCodecCtx->channel_layout);
-    //    mediaDisplay->setAudioTimeBase(m_formatCtx->streams[m_audioStreamIndex]->time_base.num, m_formatCtx->streams[m_audioStreamIndex]->time_base.den);
-    //}
+    if (m_audioStreamIndex >= 0)
+    {
+        m_mediaDisplay->initAudioSetting(m_audioCodecCtx->sample_rate, m_audioCodecCtx->channels, m_audioCodecCtx->channel_layout);
+        m_mediaDisplay->setAudioTimeBase(m_formatCtx->streams[m_audioStreamIndex]->time_base.num, m_formatCtx->streams[m_audioStreamIndex]->time_base.den);
+    }
     m_mediaDisplay->exec();
     MediaDisplay::destroyDisplayInstance(m_mediaDisplay);
 

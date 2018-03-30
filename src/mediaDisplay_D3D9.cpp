@@ -47,10 +47,11 @@ bool MediaDisplay_D3D9::init()
     wc.style = CS_HREDRAW | CS_VREDRAW;
     RegisterClassEx(&wc);
 
-    m_mainWnd = CreateWindow(L"D3DWindow", L"", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, NULL, NULL, NULL, NULL);
+    m_mainWnd = CreateWindow(L"D3DWindow", L"", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, 960, CW_USEDEFAULT, 480, NULL, NULL, NULL, NULL);
     if (m_mainWnd == NULL)
         return false;
-
+    ShowWindow(m_mainWnd, SW_SHOW);
+    UpdateWindow(m_mainWnd);
     if (initD3D())
         return true;
     else
@@ -91,7 +92,6 @@ bool MediaDisplay_D3D9::initD3D()
         msgOutput(MsgType::MSG_ERROR, "Failed to create d3d device.");
         return false;
     }
-
     return true;
 }
 
@@ -128,10 +128,7 @@ bool MediaDisplay_D3D9::initVideoSetting(int width, int height, const char *titl
 
     int x = (screenWidth - finalWidth) / 2;
     int y = (screenHeight - finalHeight) / 2;
-    SetWindowPos(m_mainWnd, HWND_TOP, x, y, width, height, SWP_SHOWWINDOW);
-
-    m_device->CreateOffscreenPlainSurface(width, height, (D3DFORMAT)MAKEFOURCC('Y', 'V', '1', '2'), D3DPOOL_DEFAULT, &m_direct3DSurfaceRender, NULL);
-
+    //SetWindowPos(m_mainWnd, HWND_TOP, x, y, width, height, SWP_SHOWWINDOW);
     m_playState.videoDisplay = true;
     return true;
 }
@@ -139,6 +136,42 @@ bool MediaDisplay_D3D9::initVideoSetting(int width, int height, const char *titl
 
 bool MediaDisplay_D3D9::initAudioSetting(int freq, uint8_t wantedChannels, uint32_t wantedChannelLayout)
 {
+    if (!m_audioPlay.isValid())
+    {
+        msgOutput(MsgType::MSG_ERROR, "Failed to create XAudioPlay class.\n");
+        return false;
+    }
+
+    int channels_;
+
+    if (!wantedChannelLayout || wantedChannels != av_get_channel_layout_nb_channels(wantedChannelLayout))
+    {
+        wantedChannelLayout = av_get_default_channel_layout(wantedChannels);
+        wantedChannelLayout &= ~AV_CH_LAYOUT_STEREO_DOWNMIX;
+    }
+    wantedChannels = av_get_channel_layout_nb_channels(wantedChannelLayout);
+    channels_ = wantedChannels;
+
+    if (freq <= 0 || channels_ <= 0)
+    {
+        msgOutput(MsgType::MSG_ERROR, "Invalid sample rate or channel count!\n");
+        return false;
+    }
+    m_audioParams.fmt = AV_SAMPLE_FMT_S16;
+    m_audioParams.freq = freq;
+    m_audioParams.channels = channels_;
+    m_audioParams.channelLayout = wantedChannelLayout;
+    m_audioParams.frameSize = av_samples_get_buffer_size(NULL, m_audioParams.channels, 1, m_audioParams.fmt, 1);
+    m_audioParams.bytesPerSec = av_samples_get_buffer_size(NULL, m_audioParams.channels, m_audioParams.freq, m_audioParams.fmt, 1);
+
+    m_audioBufferSamples = FFMAX(audioMinBufferSize, 2 << av_log2(freq / audioMaxCallBackPerSec));
+
+    m_audioBufferSizePerDeliver = av_samples_get_buffer_size(NULL, m_audioParams.channels, m_audioBufferSamples, AV_SAMPLE_FMT_S16, 1);
+    m_audioPlay.setBufferSize(AUDIO_QUEUE_SIZE, m_audioBufferSizePerDeliver);
+    if (!m_audioPlay.setFormat(av_samples_get_buffer_size(NULL, 1, 1, m_audioParams.fmt, 1), m_audioParams.channels, m_audioParams.freq))
+        return false;
+
+    m_playState.audioDisplay = true;
     return true;
 }
 
@@ -150,11 +183,11 @@ void MediaDisplay_D3D9::exec()
         m_playState.delay = 1000 / m_fps;
         m_renderControlThread = std::thread(renderControlThread, this);
     }
-    //if (m_playState.audioDisplay)
-    //{
-    //    m_audioPlay.startPlaying();
-    //    m_loadAudioControlThread = std::thread(loadAudioDataThread, this);
-    //}
+    if (m_playState.audioDisplay)
+    {
+        m_audioPlay.startPlaying();
+        m_loadAudioControlThread = std::thread(loadAudioDataThread, this);
+    }
 
     MSG msg;
     while (GetMessage(&msg, nullptr, 0, 0))
@@ -180,69 +213,69 @@ void MediaDisplay_D3D9::renderControlThread(MediaDisplay_D3D9* p)
 
 void MediaDisplay_D3D9::loadAudioDataThread(MediaDisplay_D3D9* p)
 {
-    //int PCMBufferSize = p->m_audioBufferSizePerDeliver * 4;
-    //uint8_t *PCMBuffer = (uint8_t *)av_malloc(PCMBufferSize);
-    //uint8_t *pos = PCMBuffer;
+    int PCMBufferSize = p->m_audioBufferSizePerDeliver * 4;
+    uint8_t *PCMBuffer = (uint8_t *)av_malloc(PCMBufferSize);
+    uint8_t *pos = PCMBuffer;
 
-    //int outLen = 0;
-    //int restLen = 0;
+    int outLen = 0;
+    int restLen = 0;
 
-    //while (!p->m_playState.exit && !p->m_mainCtrl->isAudioFrameEmpty())
-    //{
-    //    while (pos - PCMBuffer < p->m_audioBufferSizePerDeliver)
-    //    {
-    //        if (p->m_mainCtrl->isAudioFrameEmpty())
-    //        {
-    //            p->m_audioPlay.readData(PCMBuffer, pos - PCMBuffer);
-    //            return;
-    //        }
-    //        outLen = 0;
-    //        if (p->m_mainCtrl->getPCMData(pos, PCMBufferSize - (pos - PCMBuffer), p->m_audioParams, &p->m_playState.currentAudioTime, &outLen))
-    //        {
-    //            pos += outLen;
-    //        }
-    //    }
-    //    p->m_audioPlay.readData(PCMBuffer, p->m_audioBufferSizePerDeliver);
-    //    restLen = pos - PCMBuffer - p->m_audioBufferSizePerDeliver;
-    //    memcpy_s(PCMBuffer, p->m_audioBufferSizePerDeliver, PCMBuffer + p->m_audioBufferSizePerDeliver, restLen);
-    //    pos = PCMBuffer + restLen;
-    //}
-    //av_free(PCMBuffer);
+    while (!p->m_playState.exit && !p->m_mainCtrl->isAudioFrameEmpty())
+    {
+        while (pos - PCMBuffer < p->m_audioBufferSizePerDeliver)
+        {
+            if (p->m_mainCtrl->isAudioFrameEmpty())
+            {
+                p->m_audioPlay.readData(PCMBuffer, pos - PCMBuffer);
+                return;
+            }
+            outLen = 0;
+            if (p->m_mainCtrl->getPCMData(pos, PCMBufferSize - (pos - PCMBuffer), p->m_audioParams, &p->m_playState.currentAudioTime, &outLen))
+            {
+                pos += outLen;
+            }
+        }
+        p->m_audioPlay.readData(PCMBuffer, p->m_audioBufferSizePerDeliver);
+        restLen = pos - PCMBuffer - p->m_audioBufferSizePerDeliver;
+        memcpy_s(PCMBuffer, p->m_audioBufferSizePerDeliver, PCMBuffer + p->m_audioBufferSizePerDeliver, restLen);
+        pos = PCMBuffer + restLen;
+    }
+    av_free(PCMBuffer);
 }
 
 void MediaDisplay_D3D9::getDelay()
 {
-    //int currentAudioTime = m_audioPlay.getDuration(); //more precisely
+    int currentAudioTime = m_audioPlay.getDuration(); //more precisely
 
-    //static int32_t threshold = (1 / (float)m_fps) * 1000;
+    static int32_t threshold = (1 / (float)m_fps) * 1000;
 
-    //int32_t 		retDelay = 0.0;
-    //int32_t 		compare = 0.0;
+    int32_t 		retDelay = 0.0;
+    int32_t 		compare = 0.0;
 
 
-    //if (m_playState.currentVideoTime == 0 && currentAudioTime == 0)
-    //{
-    //    m_playState.delay = m_fps;
-    //    return;
-    //}
+    if (m_playState.currentVideoTime == 0 && currentAudioTime == 0)
+    {
+        m_playState.delay = m_fps;
+        return;
+    }
 
-    //compare = m_playState.currentVideoTime - currentAudioTime;
+    compare = m_playState.currentVideoTime - currentAudioTime;
 
-    //if (compare <= -threshold)
-    //    retDelay = m_fps / 2;
-    //else if (compare >= threshold)
-    //    retDelay = m_fps * 2;
-    //else
-    //    retDelay = threshold;
+    if (compare <= -threshold)
+        retDelay = m_fps / 2;
+    else if (compare >= threshold)
+        retDelay = m_fps * 2;
+    else
+        retDelay = threshold;
 
-    //m_playState.delay = retDelay;
+    m_playState.delay = retDelay;
 
-    //if (retDelay == threshold)
-    //    av_log(nullptr, AV_LOG_INFO, "video_time:%d,audio_time:%d,compare:%d,OK\n", m_playState.currentVideoTime, currentAudioTime, compare);
-    //else if (retDelay < threshold)
-    //    av_log(nullptr, AV_LOG_INFO, "video_time:%d,audio_time:%d,compare:%d,video delay---------\n", m_playState.currentVideoTime, currentAudioTime, compare);
-    //else
-    //    av_log(nullptr, AV_LOG_INFO, "video_time:%d,audio_time:%d,compare:%d,video fast----------\n", m_playState.currentVideoTime, currentAudioTime, compare);
+    if (retDelay == threshold)
+        av_log(nullptr, AV_LOG_INFO, "video_time:%d,audio_time:%d,compare:%d,OK\n", m_playState.currentVideoTime, currentAudioTime, compare);
+    else if (retDelay < threshold)
+        av_log(nullptr, AV_LOG_INFO, "video_time:%d,audio_time:%d,compare:%d,video delay---------\n", m_playState.currentVideoTime, currentAudioTime, compare);
+    else
+        av_log(nullptr, AV_LOG_INFO, "video_time:%d,audio_time:%d,compare:%d,video fast----------\n", m_playState.currentVideoTime, currentAudioTime, compare);
 }
 
 void MediaDisplay_D3D9::renderNextFrame(WPARAM wp)
@@ -263,20 +296,14 @@ void MediaDisplay_D3D9::renderNextFrame(WPARAM wp)
         return;
     }
 
-    static int i = 0;
-    p->msgOutput(MsgType::MSG_INFO, "render surface %d\n", i++);
     p->m_device->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_XRGB(0, 0, 0), 1.0f, 0);
     p->m_device->BeginScene();
-    if (p->m_pBackBuffer)
-    {
-        p->m_pBackBuffer->Release();
-        p->m_pBackBuffer = NULL;
-    }
-    p->m_device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &p->m_pBackBuffer);
-    GetClientRect(p->m_d3dpp.hDeviceWindow, &rect);
-    p->m_device->StretchRect(surface, NULL, p->m_pBackBuffer, &rect, D3DTEXF_LINEAR);
+    p->m_device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &backBuffer);
+    GetClientRect(p->m_mainWnd, &rect);
+    p->m_device->StretchRect(surface, NULL, backBuffer, &rect, D3DTEXF_LINEAR);
     p->m_device->EndScene();
     p->m_device->Present(NULL, NULL, NULL, NULL);
+    backBuffer->Release();
 
     LeaveCriticalSection(&p->m_critial);
 }
