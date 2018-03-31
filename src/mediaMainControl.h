@@ -7,6 +7,12 @@
 #include <memory>
 #include "pktAndFramequeue.h"
 
+enum class RenderType :int
+{
+    USING_D3D9,  // If media file's codec format inputed is DXVA2.0 supported, then use it.
+    USING_SDL,      // Using software decoder to display and using SDL library to display.
+};
+
 
 typedef struct AudioParams {
     int freq;
@@ -39,7 +45,7 @@ class MediaMainControl
 {
 public:
     //static MediaMainControl* getInstance();
-    MediaMainControl();
+    MediaMainControl(RenderType type = RenderType::USING_SDL);
     ~MediaMainControl();
 
     bool openFile(const char *file);
@@ -51,9 +57,9 @@ public:
     int32_t getDurationTime() { return m_totalTimeMS; }
 
     bool getGraphicData(GraphicDataType type, int width, int height, void *data, const uint32_t size, int *lineSize, int32_t *pts);
-    IDirect3DSurface9* getSurface(int32_t *pts); //only use in DXVA mode
+    bool getSurface(int32_t *pts, void** surface); //only use in DXVA mode
     bool getPCMData(void *data, const uint32_t size, const AudioParams para, int32_t *pts, int32_t *outLen);
-
+    bool isDXVASupport() { return m_isDXVASupport; }
     bool isAudioFrameEmpty() { return m_audioFrameQueue->m_noMorePktToDecode && m_audioFrameQueue->m_queue.empty(); }
     bool isVideoFrameEmpty() { return m_videoFrameQueue->m_noMorePktToDecode && m_videoFrameQueue->m_queue.empty(); }
 
@@ -114,7 +120,8 @@ private:
     std::thread m_decodeVideoThread;
     std::thread m_decodeAudioThread;
 
-    bool m_isAccelSupport = true;
+    bool m_isDXVASupport = false;
+    RenderType m_renderType;
 };
 
 #endif

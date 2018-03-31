@@ -95,12 +95,15 @@ bool MediaDisplay_D3D9::initD3D()
         msgOutput(MsgType::MSG_ERROR, "Failed to create d3d device.");
         return false;
     }
+
     return true;
 }
 
 bool MediaDisplay_D3D9::initVideoSetting(int width, int height, const char *title)
 {
     //initialize window
+    m_frameWidth = width;
+    m_frameHeight = height;
     wchar_t wTitle[1024];
     util::NarrowToWideBuf(title, wTitle);
     SetWindowText(m_mainWnd, wTitle);
@@ -133,6 +136,12 @@ bool MediaDisplay_D3D9::initVideoSetting(int width, int height, const char *titl
     int y = (screenHeight - finalHeight) / 2;
     //SetWindowPos(m_mainWnd, HWND_TOP, x, y, width, height, SWP_SHOWWINDOW);
     m_playState.videoDisplay = true;
+
+    if (!m_mainCtrl->isDXVASupport())
+    {
+        m_device->CreateOffscreenPlainSurface(width, height, (D3DFORMAT)MAKEFOURCC('Y', 'V', '1', '2'), D3DPOOL_DEFAULT, &m_direct3DSurfaceRender, NULL);
+    }
+
     return true;
 }
 
@@ -299,16 +308,57 @@ void MediaDisplay_D3D9::renderNextFrame(WPARAM wp)
     LRESULT lRet;
     RECT rect;
 
-    IDirect3DSurface9 *surface = nullptr;
     IDirect3DSurface9 *backBuffer = nullptr;
-
+    IDirect3DSurface9 *surface = nullptr;
     EnterCriticalSection(&p->m_critial);
 
-    surface = p->m_mainCtrl->getSurface(&p->m_playState.currentVideoTime);
-    if (!surface)
+    if (p->m_mainCtrl->isDXVASupport())
     {
-        p->msgOutput(MsgType::MSG_ERROR, "get surface point failed\n");
-        return;
+
+        if (!p->m_mainCtrl->getSurface(&p->m_playState.currentVideoTime, (void**)&surface))
+        {
+            p->msgOutput(MsgType::MSG_ERROR, "get surface point failed\n");
+            return;
+        }
+    }
+    else
+    {
+        if (p->m_direct3DSurfaceRender == nullptr)
+            return;
+        if (p->m_videoBuffer.data[0] == nullptr)
+        {
+            if (p->m_videoBuffer.data[0] != nullptr)
+                av_free(p->m_videoBuffer.data[0]);
+            p->m_videoBuffer.size = av_image_get_buffer_size(AV_PIX_FMT_YUV420P, p->m_frameWidth, p->m_frameHeight, 1);
+            unsigned char* outBuffer = (unsigned char*)av_malloc(p->m_videoBuffer.size);
+            av_image_fill_arrays(p->m_videoBuffer.data, p->m_videoBuffer.lineSize, outBuffer, AV_PIX_FMT_YUV420P, p->m_frameWidth, p->m_frameHeight, 1);
+        }
+        if (!p->m_mainCtrl->getGraphicData(GraphicDataType::YUV420, p->m_frameWidth, p->m_frameHeight, p->m_videoBuffer.data, p->m_videoBuffer.size, p->m_videoBuffer.lineSize, &p->m_playState.currentVideoTime))
+        {
+            p->msgOutput(MsgType::MSG_ERROR, "Get YUV420 data failed.\n");
+            return;
+        }
+        D3DLOCKED_RECT d3dRect;
+        p->m_direct3DSurfaceRender->LockRect(&d3dRect, NULL, D3DLOCK_DONOTWAIT);
+        byte *pSrc = p->m_videoBuffer.data[0];
+        byte *pDest = (BYTE *)d3dRect.pBits;
+        int stride = d3dRect.Pitch;
+        unsigned long i = 0;
+
+        for (i = 0; i < p->m_frameHeight; i++)
+        {
+            memmove(pDest + i * stride, pSrc + i * p->m_frameWidth, p->m_frameWidth);
+        }
+        for (i = 0; i < p->m_frameHeight / 2; i++)
+        {
+            memmove(pDest + stride * p->m_frameHeight + i * stride / 2, pSrc + p->m_frameWidth * p->m_frameHeight + p->m_frameWidth * p->m_frameHeight / 4 + i * p->m_frameWidth / 2, p->m_frameWidth / 2);
+        }
+        for (i = 0; i <  p->m_frameHeight / 2; i++)
+        {
+            memmove(pDest + stride * p->m_frameHeight + stride * p->m_frameHeight / 4 + i * stride / 2, pSrc + p->m_frameWidth * p->m_frameHeight + i * p->m_frameWidth / 2, p->m_frameWidth / 2);
+        }
+        p->m_direct3DSurfaceRender->UnlockRect();
+        surface = p->m_direct3DSurfaceRender;
     }
 
     p->m_device->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_XRGB(0, 0, 0), 1.0f, 0);

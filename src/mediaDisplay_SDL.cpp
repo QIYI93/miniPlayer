@@ -287,7 +287,7 @@ void MediaDisplay_SDL::exec()
             if (m_videoBuffer.data[0] == nullptr || w != m_windowRect.w || h != m_windowRect.h)
             {
                 if (m_videoBuffer.data[0] != nullptr)
-                    free(m_videoBuffer.data[0]);
+                    av_free(m_videoBuffer.data[0]);
                 m_videoBuffer.size = av_image_get_buffer_size(AV_PIX_FMT_YUV420P, w, h, 1);
                 unsigned char* outBuffer = (unsigned char*)av_malloc(m_videoBuffer.size);
                 av_image_fill_arrays(m_videoBuffer.data, m_videoBuffer.lineSize, outBuffer, AV_PIX_FMT_YUV420P, w, h, 1);
@@ -348,8 +348,8 @@ void MediaDisplay_SDL::getDelay()
 
     static int32_t threshold = (1 / (float)m_fps) * 1000;
 
-    int32_t 		retDelay = 0.0;
-    int32_t 		compare = 0.0;
+    int32_t retDelay = 0.0;
+    int32_t compare = 0.0;
 
 
     if (m_playState.currentVideoTime == 0 || currentAudioTimeAfterModified == 0)

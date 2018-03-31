@@ -79,6 +79,11 @@ private:
     std::thread m_loadAudioControlThread;
     std::atomic_bool m_renderControlThreadFinish = false;
     std::atomic_bool m_loadAudioControlThreadFinish = false;
+
+    videoBufferForDirectX m_videoBuffer;
+
+    int m_frameWidth = 0;
+    int m_frameHeight = 0;
 };
 
 #endif

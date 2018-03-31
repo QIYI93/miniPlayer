@@ -15,7 +15,7 @@ int main(int argc, char * argv[])
 
     const char *file = argv[1];
     {
-        MediaMainControl ctrl;
+        MediaMainControl ctrl(RenderType::USING_D3D9);
         if (ctrl.openFile(file))
         {
             ctrl.play();

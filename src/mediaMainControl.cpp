@@ -36,9 +36,10 @@ namespace
 //    return &mediaMainControl;
 //}
 
-MediaMainControl::MediaMainControl()
+MediaMainControl::MediaMainControl(RenderType type)
     :m_audioFrameRaw(av_frame_alloc())
     ,m_videoFrameRaw(av_frame_alloc())
+    ,m_renderType(type)
 {
     av_register_all();
     avformat_network_init();
@@ -124,56 +125,67 @@ bool MediaMainControl::setVideoDecoder()
         av_log(nullptr, AV_LOG_ERROR, "Not found video decoder.");
         return false;
     }
-    m_mediaDisplay = MediaDisplay::createDisplayInstance(this, DisplayType::USING_D3D9); //create window
-    if (m_mediaDisplay == nullptr)
-        return false;
+
     if (m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate.den != NULL && m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate.num != NULL)
         m_fps = av_q2d(m_formatCtx->streams[m_videoStreamIndex]->avg_frame_rate);
     //m_videoCodecCtx = m_formatCtx->streams[m_videoStreamIndex]->codec;
+
     m_videoCodecCtx = avcodec_alloc_context3(m_videoCodec);
     avcodec_parameters_to_context(m_videoCodecCtx, m_formatCtx->streams[m_videoStreamIndex]->codecpar);
+
     m_frameWidth = m_videoCodecCtx->width;
     m_frameHeight = m_videoCodecCtx->height;
-    AVCodecContext *tempCodecCtx = m_videoCodecCtx;
-    memcpy(tempCodecCtx, m_videoCodecCtx, sizeof(m_videoCodecCtx));
-    switch (m_videoCodec->id)
+
+    if (m_renderType == RenderType::USING_D3D9)
     {
-    case AV_CODEC_ID_MPEG2VIDEO:
-    case AV_CODEC_ID_H264:
-    case AV_CODEC_ID_VC1:
-    case AV_CODEC_ID_WMV3:
-    case AV_CODEC_ID_HEVC:
-    case AV_CODEC_ID_VP9:
+        m_mediaDisplay = MediaDisplay::createDisplayInstance(this, DisplayType::USING_D3D9); //create window
+        if (m_mediaDisplay == nullptr)
+            return false;
+        m_isDXVASupport = true;
+    }
+    if (m_isDXVASupport)
     {
-        m_videoCodecCtx->thread_count = 1;
-        m_dxva2Wrapper = std::make_unique<Dxva2Wrapper>(m_videoCodec, m_videoCodecCtx, dynamic_cast<MediaDisplay_D3D9*>(m_mediaDisplay));
-        m_videoCodecCtx->coded_width = m_videoCodecCtx->width;
-        m_videoCodecCtx->coded_height = m_videoCodecCtx->height;
-        if (m_dxva2Wrapper->init(m_mediaDisplay->getWinHandle()))
+        switch (m_videoCodec->id)
         {
-            m_videoCodecCtx->opaque = m_dxva2Wrapper.get();
-            m_videoCodecCtx->get_buffer2 = Dxva2Wrapper::dxva2GetBuffer;
-            m_videoCodecCtx->get_format = Dxva2Wrapper::GetHwFormat;
-            m_videoCodecCtx->thread_safe_callbacks = 1;
+        case AV_CODEC_ID_MPEG2VIDEO:
+        case AV_CODEC_ID_H264:
+        case AV_CODEC_ID_VC1:
+        case AV_CODEC_ID_WMV3:
+        case AV_CODEC_ID_HEVC:
+        case AV_CODEC_ID_VP9:
+        {
+            m_videoCodecCtx->thread_count = 1;
+            m_dxva2Wrapper = std::make_unique<Dxva2Wrapper>(m_videoCodec, m_videoCodecCtx, dynamic_cast<MediaDisplay_D3D9*>(m_mediaDisplay));
+            m_videoCodecCtx->coded_width = m_videoCodecCtx->width;
+            m_videoCodecCtx->coded_height = m_videoCodecCtx->height;
+            if (m_dxva2Wrapper->init(m_mediaDisplay->getWinHandle()))
+            {
+                m_videoCodecCtx->opaque = m_dxva2Wrapper.get();
+                m_videoCodecCtx->get_buffer2 = Dxva2Wrapper::dxva2GetBuffer;
+                m_videoCodecCtx->get_format = Dxva2Wrapper::GetHwFormat;
+                m_videoCodecCtx->thread_safe_callbacks = 1;
+                break;
+            }
+            else
+            {
+                avcodec_close(m_videoCodecCtx);
+                avcodec_free_context(&m_videoCodecCtx);
+                m_videoCodecCtx = avcodec_alloc_context3(m_videoCodec);
+                avcodec_parameters_to_context(m_videoCodecCtx, m_formatCtx->streams[m_videoStreamIndex]->codecpar);
+                m_dxva2Wrapper.release();
+                m_isDXVASupport = false;
+                break;
+            }
+        }
+        default:
+        {
+            m_isDXVASupport = false;
             break;
         }
-        else
-        {
-            m_dxva2Wrapper.release();
-            m_isAccelSupport = false;
-            break;
         }
     }
-    default:
+    if (m_isDXVASupport == false)
     {
-        m_isAccelSupport = false;
-        break;
-    }
-    }
-    if (m_isAccelSupport == false)
-    {
-        av_free(m_videoCodecCtx);
-        m_videoCodecCtx = tempCodecCtx;
         m_videoCodecCtx->thread_count = util::getNoOfProcessors();
         m_videoCodecCtx->thread_type = FF_THREAD_FRAME;
         if (m_videoCodecCtx->codec->capabilities & CODEC_CAP_TRUNCATED)
@@ -236,8 +248,6 @@ void MediaMainControl::initSeparatePktThread(void *mainCtrl)
     {
         MediaMainControl *mainCtl = static_cast<MediaMainControl*>(d);
         AVPacket *pAVPacket = (AVPacket*)av_malloc(sizeof(AVPacket));
-        //int audioPktCount = 0;
-        //int videoPktCount = 0;
         while (true)
         {
             if (!mainCtl->m_formatCtx) break;
@@ -355,10 +365,9 @@ void MediaMainControl::initDecodePktThread(void *mainCtrl)
     mainCtl->m_decodeVideoThread = std::thread(decodeVideoPktFun, mainCtrl);
 }
 
-IDirect3DSurface9* MediaMainControl::getSurface(int32_t *pts)
+bool MediaMainControl::getSurface(int32_t *pts, void** surface)
 {
     av_frame_unref(m_videoFrameRaw);
-    IDirect3DSurface9 *surface = nullptr;
     while (!m_videoFrameQueue->m_noMorePktToDecode && m_videoFrameQueue->m_queue.empty())
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(waitTime));
@@ -367,10 +376,9 @@ IDirect3DSurface9* MediaMainControl::getSurface(int32_t *pts)
         return false;
 
     m_videoFrameQueue->deQueue(m_videoFrameRaw);
-    surface = (LPDIRECT3DSURFACE9)m_videoFrameRaw->data[3];
     *pts = getVideoFramPts(m_videoFrameRaw);
-
-    return surface;
+    *surface = (void*)m_videoFrameRaw->data[3];
+    return true;
 }
 
 bool MediaMainControl::getGraphicData(GraphicDataType type, int width, int height, void *data, const uint32_t size, int *lineSize, int32_t *pts)
@@ -566,7 +574,20 @@ void MediaMainControl::play()
     initSeparatePktThread(this);
     initDecodePktThread(this);
 
-    //MediaDisplay *mediaDisplay = MediaDisplay::createDisplayInstance(this, DisplayType::USING_SDL);
+    if (!m_mediaDisplay)
+    {
+        switch (m_renderType)
+        {
+        case RenderType::USING_D3D9:
+            m_mediaDisplay = MediaDisplay::createDisplayInstance(this, DisplayType::USING_D3D9);
+            break;
+        case RenderType::USING_SDL:
+            m_mediaDisplay = MediaDisplay::createDisplayInstance(this, DisplayType::USING_SDL);
+            break;
+        default:
+            break;
+        }
+    }
 
     if (m_videoStreamIndex >= 0)
     {
